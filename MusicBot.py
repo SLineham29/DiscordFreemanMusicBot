@@ -5,12 +5,30 @@ from discord import app_commands
 import yt_dlp
 from dotenv import load_dotenv
 import asyncio
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
 
 load_dotenv()
 token = os.getenv("BOT_TOKEN")
+client_id = os.getenv("SPOTIPY_CLIENT_ID")
+client_secret = os.getenv("SPOTIPY_CLIENT_SECRET")
+
+client_credentials_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
+sp = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
 
 queue = []
 announcement_channel = None
+ytdl_options = {
+    "format": "bestaudio[ext=webm][acodec=opus]/bestaudio/best",
+    "noplaylist": True,
+    "quiet": True,
+    "source_address": "0.0.0.0",
+    "socket_timeout": 10,
+    "retries": 3,
+    "skip_unavailable_fragments": True,
+    "youtube_include_dash_manifest": False,
+    "extract_flat": False,
+}
 
 # This makes an async loop to run the YouTube searcher in a new thread.
 async def search_youtube(query, ytdl_options):
@@ -31,11 +49,10 @@ intents.voice_states = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 async def check_if_in_server(interaction):
-    # This checks if the user is currently in a voice channel
-    voice_channel = interaction.user.voice.channel
-
-    # If not, don't play the music
-    if voice_channel is None:
+    # This checks if the user is currently in a voice channel, and if not, then don't play the music.
+    try:
+        voice_channel = interaction.user.voice.channel
+    except:
         await interaction.followup.send("Go into a voice channel before trying to play anything.")
         return None
 
@@ -49,10 +66,10 @@ async def check_if_in_server(interaction):
         await voice_client.move_to(voice_channel)
     return voice_client
 
-@bot.tree.command(name="play", description="Play a song or video or add it to the queue")
-@app_commands.describe(song="A URL (Youtube only for now)")
-async def play(interaction: discord.Interaction, song: str):
-    global song_queue, announcement_channel
+@bot.tree.command(name="play_youtube", description="Play a Youtube song or video or add it to the queue")
+@app_commands.describe(link="A YouTube link")
+async def playYoutube(interaction: discord.Interaction, link: str):
+    global queue, announcement_channel, ytdl_options
     
     await interaction.response.defer()
     
@@ -60,24 +77,47 @@ async def play(interaction: discord.Interaction, song: str):
     if voice_client is None:
         return
 
-    ytdl_options = {
-        "format": "bestaudio[ext=webm][acodec=opus]/bestaudio/best",
-        "noplaylist": True,
-        "quiet": True,
-        "source_address": "0.0.0.0",
-        "socket_timeout": 10,
-        "retries": 3,
-        "skip_unavailable_fragments": True,
-        "youtube_include_dash_manifest": False,
-        "extract_flat": False,
+    info = await search_youtube(link, ytdl_options)
+
+    await play(info, interaction, voice_client)
+
+@bot.tree.command(name='play_spotify', description="Play a Spotify song or add it to the queue")
+@app_commands.describe(link="A Spotify link")
+async def playSpotify(interaction: discord.Interaction, link: str):
+    global queue, announcement_channel, ytdl_options
+
+    await interaction.response.defer()
+
+    voice_client = await check_if_in_server(interaction)
+    if voice_client is None:
+        return
+
+    song_by_link = sp.track(link)
+    song_name = song_by_link['name']
+
+    ytdl_search_options = {
+        **ytdl_options,
+        "default_search": "ytsearch"
     }
 
-    with yt_dlp.YoutubeDL(ytdl_options) as ydl:
-        info = ydl.extract_info(song, download=False)
+    results = await search_youtube(song_name, ytdl_search_options)
+    videos = results.get("entries", [])
+
+    if not videos:
+        await interaction.followup.send(f"Could not any videos with name: {song_name}")
+        return
+    
+    song = videos[0]
+
+    await play(song, interaction, voice_client)
+
+async def play(song_info, interaction, voice_client):
+
+    global announcement_channel
 
     song = {
-        "url": info.get("url"),
-        "title": info.get("title", "Untitled")
+        "url": song_info.get("url"),
+        "title": song_info.get("title", "Untitled")
     }
     
     announcement_channel = interaction.channel
@@ -117,11 +157,12 @@ async def skip(interaction: discord.Interaction):
     voice_client = await(check_if_in_server(interaction))
     if voice_client is None:
         return
-        
+    
+
     if len(queue) == 0:
-	    await interaction.followup.send("There are no songs in the queue")
-	    return
-        
+        await interaction.followup.send("There are no songs in the queue")
+        return
+
     voice_client.stop()
 
 @bot.tree.command(name="stop", description="Stop playing the song")
@@ -141,12 +182,14 @@ async def stop(interaction: discord.Interaction):
     
 async def next_song(guild):
     global queue, announcement_channel
+    voice_client = guild.voice_client    
     
     if len(queue) == 0:
+        await announcement_channel.send("The queue has now finished. Leaving call.")
+        await voice_client.disconnect()
         return
 		
     song = queue.pop(0)
-    voice_client = guild.voice_client
     
     if not voice_client:
         return
@@ -156,10 +199,12 @@ async def next_song(guild):
         'options': '-vn'
     }
     
-    #source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="bin\\ffmpeg\\ffmpeg.exe")
-    source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
+    # The top source is if I have the FFMPEG exe stored in Windows, 
+    # and the other is if it's installed globally in my Raspberry Pi.
+    source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="bin\\ffmpeg\\ffmpeg.exe")
+    #source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
     
-    def after_song(error):
+    def after_song():
         asyncio.run_coroutine_threadsafe(next_song(guild), bot.loop)
     
     voice_client.play(source, after=after_song)
