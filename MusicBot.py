@@ -113,7 +113,7 @@ async def playSpotify(interaction: discord.Interaction, link: str):
 
 async def play(song_info, interaction, voice_client):
 
-    global announcement_channel
+    global queue, announcement_channel
 
     song = {
         "url": song_info.get("url"),
@@ -152,6 +152,8 @@ async def resume(interaction: discord.Interaction):
     
 @bot.tree.command(name="skip", description="Skip the current song and go to the next one in the queue")
 async def skip(interaction: discord.Interaction):
+    global queue
+
     await interaction.response.send_message("Skipping...")
 
     voice_client = await(check_if_in_server(interaction))
@@ -176,15 +178,31 @@ async def stop(interaction: discord.Interaction):
     await voice_client.disconnect()
 
     await interaction.followup.send("Song has stopped and queue has been cleared.")
-    
-async def next_song(guild):
-    global queue, announcement_channel
-    voice_client = guild.voice_client    
+
+@bot.tree.command(name="queue", description="See what's currently in the queue")
+async def seeCurrentQueue(interaction: discord.Interaction):
+    global queue
+
+    await interaction.response.defer()
     
     if len(queue) == 0:
-        await announcement_channel.send("All songs have now been played. Leaving call.")
-        await voice_client.disconnect()
-        return
+        await interaction.followup.send("There is currently nothing in the queue.")
+    elif len(queue) == 1:
+        queue_songs = f"There is currently 1 song in the queue:\n\n"
+        + f"1) {queue[1].get('title')}"
+        await interaction.followup.send(queue_songs)
+    else:
+        queue_songs = f"There are currently {len(queue)} songs in the queue:\n\n"
+        for position, song in enumerate(queue):
+            queue_songs += f"{position + 1}) {song.get('title')}\n"
+        await interaction.followup.send(queue_songs)
+
+async def next_song(guild):
+    global queue, announcement_channel
+    voice_client = guild.voice_client
+    
+    if voice_client.is_playing():
+        voice_client.stop()
 		
     song = queue.pop(0)
     
@@ -201,7 +219,11 @@ async def next_song(guild):
     source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="bin\\ffmpeg\\ffmpeg.exe")
     #source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
     
-    def after_song():
+    async def after_song(error):
+        if len(queue) == 0:
+            await announcement_channel.send("All songs have now been played. Leaving call.")
+            await voice_client.disconnect()
+            return
         asyncio.run_coroutine_threadsafe(next_song(guild), bot.loop)
     
     voice_client.play(source, after=after_song)
