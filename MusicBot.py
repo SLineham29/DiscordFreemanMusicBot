@@ -150,22 +150,18 @@ async def resume(interaction: discord.Interaction):
     
     voice_client.resume()
     
-@bot.tree.command(name="skip", description="Skip to the next song in the queue")
+@bot.tree.command(name="skip", description="Skip the current song and go to the next one in the queue")
 async def skip(interaction: discord.Interaction):
     await interaction.response.send_message("Skipping...")
 
     voice_client = await(check_if_in_server(interaction))
     if voice_client is None:
+        await interaction.followup.send("The bot is not in a call.")
         return
     
+    await next_song(interaction.guild)
 
-    if len(queue) == 0:
-        await interaction.followup.send("There are no songs in the queue")
-        return
-
-    voice_client.stop()
-
-@bot.tree.command(name="stop", description="Stop playing the song")
+@bot.tree.command(name="stop", description="Clear the queue and leave the call")
 async def stop(interaction: discord.Interaction):
     global queue
 	
@@ -173,19 +169,20 @@ async def stop(interaction: discord.Interaction):
 
     voice_client = await(check_if_in_server(interaction))
     if voice_client is None:
+        await interaction.followup.send("The bot is not in a call.")
         return
     
     queue.clear()
     await voice_client.disconnect()
 
-    await interaction.followup.send("Song has stopped.")
+    await interaction.followup.send("Song has stopped and queue has been cleared.")
     
 async def next_song(guild):
     global queue, announcement_channel
     voice_client = guild.voice_client    
     
     if len(queue) == 0:
-        await announcement_channel.send("The queue has now finished. Leaving call.")
+        await announcement_channel.send("All songs have now been played. Leaving call.")
         await voice_client.disconnect()
         return
 		
