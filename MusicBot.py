@@ -8,6 +8,7 @@ import asyncio
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import re
+import requests
 
 load_dotenv()
 token = os.getenv("BOT_TOKEN")
@@ -95,12 +96,10 @@ async def playSpotify(interaction: discord.Interaction, link: str):
     
     # # Capture anything after track, and before the next symbol, which should be the end of the ID.
     if re.search('spotify.link', link):
-        id_search = re.search(r'spotify.link/([a-zA-Z0-9]+)', link)
-    elif re.search('open.spotify.com', link):
-        id_search = re.search(r'/track/([a-zA-Z0-9]+)', link)
-    else:
-        await interaction.followup.send("This is not a valid Spotify link.")
-        return
+        web_response = requests.head(link, allow_redirects=True, timeout=5)
+        link = web_response.url
+
+    id_search = re.search(r'/track/([a-zA-Z0-9]+)', link)
 
     if id_search:
         song_id = id_search.group(1)
