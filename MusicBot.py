@@ -189,7 +189,7 @@ async def seeCurrentQueue(interaction: discord.Interaction):
         await interaction.followup.send("There is currently nothing in the queue.")
     elif len(queue) == 1:
         queue_songs = f"There is currently 1 song in the queue:\n\n"
-        + f"1) {queue[1].get('title')}"
+        + f"1) {queue[0].get('title')}"
         await interaction.followup.send(queue_songs)
     else:
         queue_songs = f"There are currently {len(queue)} songs in the queue:\n\n"
@@ -216,8 +216,8 @@ async def next_song(guild):
     
     # The top source is if I have the FFMPEG exe stored in Windows, 
     # and the other is if it's installed globally in my Raspberry Pi.
-    source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="bin\\ffmpeg\\ffmpeg.exe")
-    #source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
+    #source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="bin\\ffmpeg\\ffmpeg.exe")
+    source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
     
     async def after_song(error):
         if len(queue) == 0:
