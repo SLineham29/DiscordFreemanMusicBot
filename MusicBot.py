@@ -189,7 +189,7 @@ async def seeCurrentQueue(interaction: discord.Interaction):
         await interaction.followup.send("There is currently nothing in the queue.")
     elif len(queue) == 1:
         queue_songs = f"There is currently 1 song in the queue:\n\n"
-        + f"1) {queue[0].get('title')}"
+        queue_songs += f"1) {queue[0].get('title')}"
         await interaction.followup.send(queue_songs)
     else:
         queue_songs = f"There are currently {len(queue)} songs in the queue:\n\n"
@@ -219,10 +219,10 @@ async def next_song(guild):
     #source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="bin\\ffmpeg\\ffmpeg.exe")
     source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
     
-    async def after_song(error):
+    def after_song(error):
         if len(queue) == 0:
-            await announcement_channel.send("All songs have now been played. Leaving call.")
-            await voice_client.disconnect()
+            announcement_channel.send("All songs have now been played. Leaving call.")
+            voice_client.disconnect()
             return
         asyncio.run_coroutine_threadsafe(next_song(guild), bot.loop)
     
