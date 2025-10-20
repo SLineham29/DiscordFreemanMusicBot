@@ -93,7 +93,7 @@ async def playSpotify(interaction: discord.Interaction, link: str):
         return
 
     song_by_link = sp.track(link)
-    song_name = f"{song_by_link['name']} - {song_by_link['artist']}"
+    song_name = f"{song_by_link['name']} - {song_by_link['artists'][0]['name']}"
 
     ytdl_search_options = {
         **ytdl_options,
