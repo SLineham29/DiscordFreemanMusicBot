@@ -93,7 +93,7 @@ async def playSpotify(interaction: discord.Interaction, link: str):
         return
 
     song_by_link = sp.track(link)
-    song_name = song_by_link['name']
+    song_name = f"{song_by_link['name']} - {song_by_link['artist']}"
 
     ytdl_search_options = {
         **ytdl_options,
@@ -161,7 +161,7 @@ async def skip(interaction: discord.Interaction):
         await interaction.followup.send("The bot is not in a call.")
         return
     
-    await next_song(interaction.guild)
+    await voice_client.stop()
 
 @bot.tree.command(name="stop", description="Clear the queue and leave the call")
 async def stop(interaction: discord.Interaction):
@@ -203,11 +203,16 @@ async def next_song(guild):
     
     if voice_client.is_playing():
         voice_client.stop()
-		
-    song = queue.pop(0)
-    
+
     if not voice_client:
+        return        
+	
+    if len(queue) == 0:
+        await announcement_channel.send("All songs have now been played. Leaving call.")
+        await voice_client.disconnect()
         return
+    else:
+        song = queue.pop(0)
     
     ffmpeg_options = {
         'before_options': "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
@@ -220,10 +225,6 @@ async def next_song(guild):
     source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
     
     def after_song(error):
-        if len(queue) == 0:
-            announcement_channel.send("All songs have now been played. Leaving call.")
-            voice_client.disconnect()
-            return
         asyncio.run_coroutine_threadsafe(next_song(guild), bot.loop)
     
     voice_client.play(source, after=after_song)
