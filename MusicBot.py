@@ -161,7 +161,7 @@ async def skip(interaction: discord.Interaction):
         await interaction.followup.send("The bot is not in a call.")
         return
     
-    await voice_client.stop()
+    voice_client.stop()
 
 @bot.tree.command(name="stop", description="Clear the queue and leave the call")
 async def stop(interaction: discord.Interaction):
