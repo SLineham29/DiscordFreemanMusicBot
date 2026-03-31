@@ -1,0 +1,166 @@
+import os
+import discord
+from discord.ext import commands
+from discord import app_commands
+import asyncio
+from SearchPlatforms import SearchPlatforms
+
+# In the Discord.py library a collection of commands are called 'Cogs',
+# which means that this class is a 'Cog' containing all the music commands.
+class MusicCommands(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.queue = []
+        self.announcement_channel = None
+        self.searcher = SearchPlatforms(os.getenv("SPOTIPY_CLIENT_ID"), os.getenv("SPOTIPY_CLIENT_SECRET"))
+
+    async def check_if_in_server(self, interaction):
+        # This checks if the user is currently in a voice channel, and if not, then don't play the music.
+        try:
+            voice_channel = interaction.user.voice.channel
+        except:
+            await interaction.followup.send("Go into a voice channel before trying to play anything.")
+            return None
+
+        # This checks if the bot is currently connected to a voice channel
+        voice_client = interaction.guild.voice_client
+
+        # If it's not, connect to the one where the user is, else if the user is in a different channel, go to that.
+        if voice_client is None:
+            voice_client = await voice_channel.connect()
+        elif voice_channel != voice_client.channel:
+            await voice_client.move_to(voice_channel)
+        return voice_client
+
+    @app_commands.command(name="play", description="Play a Youtube/Spotify song or video")
+    @app_commands.describe(link="A YouTube/Spotify link")
+    async def parse_and_play(self, interaction: discord.Interaction, link: str):
+
+        await interaction.response.defer()
+
+        voice_client = await self.check_if_in_server(interaction)
+        if voice_client is None:
+            return
+
+        info = await self.searcher.search_youtube(link)
+
+        await self.play(info, interaction, voice_client)
+
+    @app_commands.command(name="pause", description="Pause the song")
+    async def pause(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
+        voice_client = await(self.check_if_in_server(interaction))
+        if voice_client is None:
+            return
+
+        voice_client.pause()
+
+        await interaction.followup.send("Song is paused")
+
+    @app_commands.command(name="resume", description="Resume the song")
+    async def resume(self, interaction: discord.Interaction):
+        await interaction.response.send_message("Resuming...")
+
+        voice_client = await(self.check_if_in_server(interaction))
+        if voice_client is None:
+            return
+
+        voice_client.resume()
+
+    @app_commands.command(name="skip", description="Skip the current song and go to the next one in the queue")
+    async def skip(self, interaction: discord.Interaction):
+
+        await interaction.response.send_message("Skipping...")
+
+        voice_client = await(self.check_if_in_server(interaction))
+        if voice_client is None:
+            await interaction.followup.send("The bot is not in a call.")
+            return
+
+        voice_client.stop()
+
+    @app_commands.command(name="stop", description="Clear the queue and leave the call")
+    async def stop(self, interaction: discord.Interaction):
+
+        await interaction.response.defer()
+
+        voice_client = await(self.check_if_in_server(interaction))
+        if voice_client is None:
+            await interaction.followup.send("The bot is not in a call.")
+            return
+
+        self.queue.clear()
+        await voice_client.disconnect()
+
+        await interaction.followup.send("Song has stopped and queue has been cleared.")
+
+    @app_commands.command(name="queue", description="See what's currently in the queue")
+    async def see_current_queue(self, interaction: discord.Interaction):
+
+        await interaction.response.defer()
+
+        if len(self.queue) == 0:
+            await interaction.followup.send("There is currently nothing in the queue.")
+        elif len(self.queue) == 1:
+            queue_songs = f"There is currently 1 song in the queue:\n\n"
+            queue_songs += f"1) {self.queue[0].get('title')}"
+            await interaction.followup.send(queue_songs)
+        else:
+            queue_songs = f"There are currently {len(self.queue)} songs in the queue:\n\n"
+            for position, song in enumerate(self.queue):
+                queue_songs += f"{position + 1}) {song.get('title')}\n"
+            await interaction.followup.send(queue_songs)
+
+    async def play(self, song_info, interaction, voice_client):
+
+        song = {
+            "url": song_info.get("url"),
+            "title": song_info.get("title", "Untitled")
+        }
+
+        announcement_channel = interaction.channel
+        self.queue.append(song)
+
+        await interaction.followup.send(f"Added to Queue: {song['title']}")
+
+        if not voice_client.is_playing() and not voice_client.is_paused():
+            await self.next_song(interaction.guild)
+
+    async def next_song(self, guild):
+        voice_client = guild.voice_client
+
+        if voice_client.is_playing():
+            voice_client.stop()
+
+        if not voice_client:
+            return
+
+        if len(self.queue) == 0:
+            await self.announcement_channel.send("All songs have now been played. Leaving call.")
+            await voice_client.disconnect()
+            return
+        else:
+            song = self.queue.pop(0)
+
+        ffmpeg_options = {
+            'before_options': "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            'options': '-vn'
+        }
+
+        # The top source is if I have the FFMPEG exe stored in Windows,
+        # and the other is if it's installed globally in my Raspberry Pi.
+        source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="bin\\ffmpeg\\ffmpeg.exe")
+
+        # source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
+
+        def after_song(error):
+            asyncio.run_coroutine_threadsafe(self.next_song(guild), self.bot.loop)
+
+        voice_client.play(source, after=after_song)
+
+        if self.announcement_channel:
+            await self.announcement_channel.send(f"Now Playing: {song['title']}")
+
+async def setup(bot):
+    await bot.add_cog(MusicCommands(bot))
