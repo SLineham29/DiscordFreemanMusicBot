@@ -1,5 +1,6 @@
 import os
 import platform
+import random
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -43,7 +44,17 @@ class MusicCommands(commands.Cog):
         if voice_client is None:
             return
 
-        info = await self.searcher.search_youtube(link)
+        random_chance = random.randint(1, 100)
+        if random_chance == 50:
+            link = "https://youtu.be/yU6gG-p5FZc?si=u58gj53pC3m5h3vq"
+            await interaction.followup.send("Congratulations, your link has been randomly selected to turn into Skin by Rag'n'Bone Man!")
+
+        if "youtu" in link:
+            info = await self.searcher.search_youtube(link)
+        elif "spotify" in link:
+            info = await self.searcher.search_spotify(link)
+        else:
+            await interaction.followup.send("Please enter a valid link.")
 
         await self.play(info, interaction, voice_client)
 
@@ -91,10 +102,25 @@ class MusicCommands(commands.Cog):
             await interaction.followup.send("The bot is not in a call.")
             return
 
+        await voice_client.stop()
         self.queue.clear()
-        await voice_client.disconnect()
 
         await interaction.followup.send("Song has stopped and queue has been cleared.")
+
+    @app_commands.command(name="leave", description="Leave the call.")
+    async def disconnect(self, interaction: discord.Interaction):
+
+        await interaction.response.defer()
+
+        voice_client = await(self.check_if_in_server(interaction))
+        if voice_client is None:
+            await interaction.followup.send("The bot is not in a call.")
+            return
+
+        await voice_client.disconnect()
+
+        await interaction.followup.send("I have left the call.")
+
 
     @app_commands.command(name="queue", description="See what's currently in the queue")
     async def see_current_queue(self, interaction: discord.Interaction):
