@@ -20,6 +20,7 @@ class SearchPlatforms:
             "skip_unavailable_fragments": True,
             "youtube_include_dash_manifest": False,
             "extract_flat": False,
+            "remote_components": ["ejs:github"],
         }
 
     # This makes an async loop to run the YouTube searcher in a new thread.

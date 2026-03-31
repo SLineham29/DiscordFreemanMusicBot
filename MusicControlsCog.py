@@ -1,4 +1,5 @@
 import os
+import platform
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -150,9 +151,10 @@ class MusicCommands(commands.Cog):
 
         # The top source is if I have the FFMPEG exe stored in Windows,
         # and the other is if it's installed globally in my Raspberry Pi.
-        source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="bin\\ffmpeg\\ffmpeg.exe")
-
-        # source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
+        if platform.system() == "Windows":
+            source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="bin\\ffmpeg\\ffmpeg.exe")
+        else:
+            source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
 
         def after_song(error):
             asyncio.run_coroutine_threadsafe(self.next_song(guild), self.bot.loop)
