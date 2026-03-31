@@ -36,7 +36,6 @@ class SearchPlatforms:
             result = ytdl.extract_info(query, download=False)
         return result
 
-
     async def search_spotify(self, link):
 
         # # Capture anything after track, and before the next symbol, which should be the end of the ID.
@@ -53,7 +52,7 @@ class SearchPlatforms:
             return
 
         song = self.sp.track(song_id)
-        song_name = f"{song['name']} - {song['artists'][0]['name']}"
+        song_name = f"{song['name']} - {song['artists'][0]['name']} (Lyrics)"
 
         ytdl_search_options = {
             **self.ytdl_options,
@@ -64,5 +63,4 @@ class SearchPlatforms:
         videos = results.get("entries", [])
 
         song = videos[0]
-
         return song

@@ -1,6 +1,7 @@
 import os
 import platform
 import random
+import datetime
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -60,7 +61,7 @@ class MusicCommands(commands.Cog):
 
     @app_commands.command(name="pause", description="Pause the song")
     async def pause(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+        await interaction.response.send_message("Pausing...", ephemeral=True)
 
         voice_client = await(self.check_if_in_server(interaction))
         if voice_client is None:
@@ -68,11 +69,9 @@ class MusicCommands(commands.Cog):
 
         voice_client.pause()
 
-        await interaction.followup.send("Song is paused")
-
     @app_commands.command(name="resume", description="Resume the song")
     async def resume(self, interaction: discord.Interaction):
-        await interaction.response.send_message("Resuming...")
+        await interaction.response.send_message("Resuming...", ephemeral=True)
 
         voice_client = await(self.check_if_in_server(interaction))
         if voice_client is None:
@@ -83,7 +82,17 @@ class MusicCommands(commands.Cog):
     @app_commands.command(name="skip", description="Skip the current song and go to the next one in the queue")
     async def skip(self, interaction: discord.Interaction):
 
-        await interaction.response.send_message("Skipping...")
+        await interaction.response.send_message("Skipping...", ephemeral=True)
+
+        voice_client = await(self.check_if_in_server(interaction))
+        if voice_client is None:
+            await interaction.followup.send("The bot is not in a call.", ephemeral=True)
+            return
+
+        voice_client.stop()
+
+    @app_commands.command(name="stop", description="Stop the current song and clear the queue")
+    async def stop(self, interaction: discord.Interaction):
 
         voice_client = await(self.check_if_in_server(interaction))
         if voice_client is None:
@@ -91,21 +100,9 @@ class MusicCommands(commands.Cog):
             return
 
         voice_client.stop()
-
-    @app_commands.command(name="stop", description="Clear the queue and leave the call")
-    async def stop(self, interaction: discord.Interaction):
-
-        await interaction.response.defer()
-
-        voice_client = await(self.check_if_in_server(interaction))
-        if voice_client is None:
-            await interaction.followup.send("The bot is not in a call.")
-            return
-
-        await voice_client.stop()
         self.queue.clear()
 
-        await interaction.followup.send("Song has stopped and queue has been cleared.")
+        await interaction.followup.send("Song has stopped and queue has been cleared.", ephemeral=True)
 
     @app_commands.command(name="leave", description="Leave the call.")
     async def disconnect(self, interaction: discord.Interaction):
@@ -120,7 +117,6 @@ class MusicCommands(commands.Cog):
         await voice_client.disconnect()
 
         await interaction.followup.send("I have left the call.")
-
 
     @app_commands.command(name="queue", description="See what's currently in the queue")
     async def see_current_queue(self, interaction: discord.Interaction):
@@ -143,16 +139,34 @@ class MusicCommands(commands.Cog):
 
         song = {
             "url": song_info.get("url"),
-            "title": song_info.get("title", "Untitled")
+            "title": song_info.get("title", "Untitled"),
+            "duration": song_info.get("duration"),
+            "thumbnail": song_info.get("thumbnail"),
+            "user_id": interaction.user.id
         }
 
-        announcement_channel = interaction.channel
+        self.announcement_channel = interaction.channel
         self.queue.append(song)
 
-        await interaction.followup.send(f"Added to Queue: {song['title']}")
+        await interaction.followup.send(f"Added to Queue: {song['title']}", ephemeral=True)
 
         if not voice_client.is_playing() and not voice_client.is_paused():
             await self.next_song(interaction.guild)
+
+    def now_playing_embed(self, song):
+
+        embed = discord.Embed(
+            title="Now Playing",
+            description=song.get("title"),
+            colour=discord.Colour.blue()
+        )
+        embed.add_field(name="Added By", value=f"<@{song['user_id']}>")
+
+        embed.add_field(name="Length", value=datetime.timedelta(seconds=song.get("duration") or 0))
+
+        embed.set_thumbnail(url=song.get("thumbnail"))
+
+        return embed
 
     async def next_song(self, guild):
         voice_client = guild.voice_client
@@ -164,7 +178,8 @@ class MusicCommands(commands.Cog):
             return
 
         if len(self.queue) == 0:
-            await self.announcement_channel.send("All songs have now been played. Leaving call.")
+            if self.announcement_channel:
+                await self.announcement_channel.send("All songs have now been played. Leaving call.")
             await voice_client.disconnect()
             return
         else:
@@ -185,10 +200,11 @@ class MusicCommands(commands.Cog):
         def after_song(error):
             asyncio.run_coroutine_threadsafe(self.next_song(guild), self.bot.loop)
 
-        voice_client.play(source, after=after_song)
-
+        embed = self.now_playing_embed(song)
         if self.announcement_channel:
-            await self.announcement_channel.send(f"Now Playing: {song['title']}")
+            await self.announcement_channel.send(embed=embed)
+
+        voice_client.play(source, after=after_song)
 
 async def setup(bot):
     await bot.add_cog(MusicCommands(bot))
