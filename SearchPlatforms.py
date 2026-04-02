@@ -24,13 +24,24 @@ class SearchPlatforms:
         }
 
     # This makes an async loop to run the YouTube searcher in a new thread.
-    async def search_youtube(self, query, ytdl_options=None):
+    async def search_youtube_video(self, query, ytdl_options=None):
         ytdl_options = ytdl_options or self.ytdl_options
 
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, lambda: self.extract(query, ytdl_options))
 
-    # This actually looks through YouTube for the video.
+    async def search_youtube_playlist(self, query):
+        # Need to use 'extract_flat' here because otherwise, depending on the size of the playlist,
+        # it might take too long to get data for every song.
+        ytdl_playlist_options = {
+            **self.ytdl_options,
+            "extract_flat": True,
+        }
+
+        playlist_links = await self.search_youtube_video(query, ytdl_playlist_options)
+        return playlist_links
+
+    # This actually looks through YouTube for the video/playlist.
     def extract(self, query, ytdl_options):
         with yt_dlp.YoutubeDL(ytdl_options) as ytdl:
             result = ytdl.extract_info(query, download=False)
@@ -54,12 +65,12 @@ class SearchPlatforms:
         song = self.sp.track(song_id)
         song_name = f"{song['name']} - {song['artists'][0]['name']} (Lyrics)"
 
-        ytdl_search_options = {
+        ytdl_spotify_options = {
             **self.ytdl_options,
             "default_search": "ytsearch"
         }
 
-        results = await self.search_youtube(song_name, ytdl_search_options)
+        results = await self.search_youtube_video(song_name, ytdl_spotify_options)
         videos = results.get("entries", [])
 
         song = videos[0]
