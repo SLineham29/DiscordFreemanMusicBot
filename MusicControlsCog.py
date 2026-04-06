@@ -41,6 +41,21 @@ async def check_if_in_server(interaction):
         await voice_client.move_to(voice_channel)
     return voice_client
 
+def now_playing_embed(self, song):
+
+    embed = discord.Embed(
+        title="Now Playing",
+        description=song.get("title"),
+        colour=discord.Colour.blue()
+    )
+    embed.add_field(name="Added By", value=f"<@{song['user_id']}>")
+
+    embed.add_field(name="Length", value=datetime.timedelta(seconds=song.get("duration") or 0))
+
+    embed.set_thumbnail(url=song.get("thumbnail"))
+
+    return embed
+
 # In the Discord.py library a collection of commands are called 'Cogs',
 # which means that this class is a 'Cog' containing all the music commands.
 class MusicCommands(commands.Cog):
@@ -79,11 +94,22 @@ class MusicCommands(commands.Cog):
                     await self.add_to_queue(song, interaction, voice_client, not_last_song)
                 await interaction.followup.send(f"Added {len(playlist_songs)} songs from {playlist_info.get("title")} to the queue")
                 return
+            else:
+                await interaction.followup.send("Invalid link type.")
+                return
         elif "spotify" in link:
             if link_type == "video":
-                song_info = await self.searcher.search_spotify(link)
+                song_info = await self.searcher.search_spotify_video(link)
             elif link_type == "playlist":
-                print("This will add and get all songs in a Spotify playlist soon.")
+                playlist_info = await self.searcher.search_spotify_playlist(link)
+                print(playlist_info)
+                for i, song in enumerate(playlist_info):
+                    not_last_song = (i != len(playlist_info) - 1)
+                    await self.add_to_queue(song, interaction, voice_client, not_last_song)
+                await interaction.followup.send(f"Added {len(playlist_info)} songs from a Spotify playlist to the queue")
+                return
+            else:
+                await interaction.followup.send("Invalid link type.")
                 return
         else:
             await interaction.followup.send("Please enter a valid link.")
@@ -184,21 +210,6 @@ class MusicCommands(commands.Cog):
         if not part_of_playlist:
             if not voice_client.is_playing() and not voice_client.is_paused():
                 await self.next_song(interaction.guild)
-
-    def now_playing_embed(self, song):
-
-        embed = discord.Embed(
-            title="Now Playing",
-            description=song.get("title"),
-            colour=discord.Colour.blue()
-        )
-        embed.add_field(name="Added By", value=f"<@{song['user_id']}>")
-
-        embed.add_field(name="Length", value=datetime.timedelta(seconds=song.get("duration") or 0))
-
-        embed.set_thumbnail(url=song.get("thumbnail"))
-
-        return embed
 
     async def next_song(self, guild):
 
