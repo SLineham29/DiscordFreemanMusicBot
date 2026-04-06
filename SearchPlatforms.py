@@ -5,6 +5,12 @@ from spotipy.oauth2 import SpotifyClientCredentials
 import re
 import requests
 
+# This actually looks through YouTube for the video/playlist.
+def extract(query, ytdl_options):
+    with yt_dlp.YoutubeDL(ytdl_options) as ytdl:
+        result = ytdl.extract_info(query, download=False)
+    return result
+
 class SearchPlatforms:
     def __init__(self, client_id, client_secret):
         self.sp = spotipy.Spotify(client_credentials_manager=
@@ -23,9 +29,16 @@ class SearchPlatforms:
             "remote_components": ["ejs:github"],
         }
 
+        # Need to use 'extract_flat' here because otherwise, depending on the size of the playlist,
+        # it might take too long to get data for every song.
         self.ytdl_playlist_options = {
             **self.ytdl_options,
             "extract_flat": True,
+        }
+
+        self.ytdl_yt_search_options = {
+            **self.ytdl_options,
+            "default_search": "ytsearch"
         }
 
     # This makes an async loop to run the YouTube searcher in a new thread.
@@ -33,20 +46,11 @@ class SearchPlatforms:
         ytdl_options = ytdl_options or self.ytdl_options
 
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, lambda: self.extract(link, ytdl_options))
+        return await loop.run_in_executor(None, lambda: extract(link, ytdl_options))
 
     async def search_youtube_playlist(self, link):
-        # Need to use 'extract_flat' here because otherwise, depending on the size of the playlist,
-        # it might take too long to get data for every song.
-
         playlist_links = await self.search_youtube_video(link, self.ytdl_playlist_options)
         return playlist_links
-
-    # This actually looks through YouTube for the video/playlist.
-    def extract(self, query, ytdl_options):
-        with yt_dlp.YoutubeDL(ytdl_options) as ytdl:
-            result = ytdl.extract_info(query, download=False)
-        return result
 
     async def search_spotify_video(self, link):
 
@@ -66,12 +70,7 @@ class SearchPlatforms:
         song = self.sp.track(song_id)
         song_name = f"{song['name']} - {song['artists'][0]['name']}"
 
-        ytdl_spotify_options = {
-            **self.ytdl_options,
-            "default_search": "ytsearch"
-        }
-
-        results = await self.search_youtube_video(song_name, ytdl_spotify_options)
+        results = await self.search_youtube_video(song_name, self.ytdl_yt_search_options)
         videos = results.get("entries", [])
 
         song = videos[0]
@@ -110,3 +109,35 @@ class SearchPlatforms:
             spotify_playlist_songs.append(videos[0])
 
         return spotify_playlist_songs
+
+    async def search_apple_song(self, link):
+        id_search = re.search(r'i=([a-zA-Z0-9]+)', link)
+
+        if not id_search:
+            print("Could not find a valid iTunes ID in this link.")
+
+        song_id = id_search.group(1)
+
+        # Instead of paying £80 a year for Apple developer access, they keep this simple lookup page free to use to
+        # quickly get song and playlist information from a given ID.
+        itunes_search_link = f"https://itunes.apple.com/lookup?id={song_id}"
+        json_results = requests.get(itunes_search_link)
+
+        if json_results.status_code == 200:
+            parsed_results = json_results.json()
+            if parsed_results["resultCount"] != 0:
+                song_info = parsed_results["results"][0]
+            else:
+                print("ITunes could not find a valid song from the given ID")
+                return None
+        else:
+            print("Invalid response from iTunes API.")
+            return None
+
+        song_name = f"{song_info['trackName']} - {song_info['artistName']}"
+
+        results = await self.search_youtube_video(song_name, self.ytdl_yt_search_options)
+        videos = results.get("entries", [])
+
+        song = videos[0]
+        return song

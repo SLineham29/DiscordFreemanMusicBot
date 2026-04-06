@@ -12,14 +12,20 @@ def get_link_type(link):
     link_type = "video"
 
     # Youtube links
-    if "list=" in link:
-        link_type = "playlist"
+    if "youtu" in link:
+        link_type = "youtube_video"
+        if "list=" in link:
+            link_type = "youtube_playlist"
 
     # Spotify Links
-    if "/playlist/" in link:
-        link_type = "playlist"
-    if "/album/" in link:
-        link_type = "playlist"
+    if "spotify" in link:
+        link_type = "spotify_song"
+        if "/playlist/" in link or "/album/" in link:
+            link_type = "spotify_playlist"
+
+    # Apple Music / ITunes Links
+    if "apple" in link:
+        link_type = "apple_song"
 
     return link_type
 
@@ -41,7 +47,7 @@ async def check_if_in_server(interaction):
         await voice_client.move_to(voice_channel)
     return voice_client
 
-def now_playing_embed(self, song):
+def now_playing_embed(song):
 
     embed = discord.Embed(
         title="Now Playing",
@@ -65,8 +71,8 @@ class MusicCommands(commands.Cog):
         self.announcement_channel = None
         self.searcher = SearchPlatforms(os.getenv("SPOTIPY_CLIENT_ID"), os.getenv("SPOTIPY_CLIENT_SECRET"))
 
-    @app_commands.command(name="play", description="Play a Youtube/Spotify song or video")
-    @app_commands.describe(link="A YouTube/Spotify link")
+    @app_commands.command(name="play", description="Play a Youtube / Spotify / Apple Music song or playlist")
+    @app_commands.describe(link="A YouTube / Spotify / Apple Music link")
     async def parse_and_play(self, interaction: discord.Interaction, link: str):
 
         await interaction.response.defer()
@@ -80,27 +86,25 @@ class MusicCommands(commands.Cog):
         random_chance = random.randint(1, 100)
         if random_chance == 50:
             link = "https://youtu.be/yU6gG-p5FZc?si=u58gj53pC3m5h3vq"
-            link_type = "video"
+            link_type = "youtube_video"
             await interaction.followup.send("Congratulations, your link has been randomly selected to turn into Skin by Rag'n'Bone Man!")
 
-        if "youtu" in link:
-            if link_type == "video":
+        match link_type:
+            case "youtube_video":
                 song_info = await self.searcher.search_youtube_video(link)
-            elif link_type == "playlist":
+            case "youtube_playlist":
                 playlist_info = await self.searcher.search_youtube_playlist(link)
+                print(playlist_info)
                 playlist_songs = playlist_info.get("entries", [])
                 for i, song in enumerate(playlist_songs):
                     not_last_song = (i != len(playlist_songs) - 1)
                     await self.add_to_queue(song, interaction, voice_client, not_last_song)
-                await interaction.followup.send(f"Added {len(playlist_songs)} songs from {playlist_info.get("title")} to the queue")
+                await interaction.followup.send(
+                    f"Added {len(playlist_songs)} songs from {playlist_info.get("title")} to the queue")
                 return
-            else:
-                await interaction.followup.send("Invalid link type.")
-                return
-        elif "spotify" in link:
-            if link_type == "video":
+            case "spotify_song":
                 song_info = await self.searcher.search_spotify_video(link)
-            elif link_type == "playlist":
+            case "spotify_playlist":
                 playlist_info = await self.searcher.search_spotify_playlist(link)
                 print(playlist_info)
                 for i, song in enumerate(playlist_info):
@@ -108,12 +112,11 @@ class MusicCommands(commands.Cog):
                     await self.add_to_queue(song, interaction, voice_client, not_last_song)
                 await interaction.followup.send(f"Added {len(playlist_info)} songs from a Spotify playlist to the queue")
                 return
-            else:
+            case "apple_song":
+                song_info = await self.searcher.search_apple_song(link)
+            case _:
                 await interaction.followup.send("Invalid link type.")
                 return
-        else:
-            await interaction.followup.send("Please enter a valid link.")
-            return
 
         await self.add_to_queue(song_info, interaction, voice_client, False)
         await interaction.followup.send(f"Added to Queue: {song_info.get("title")}", ephemeral=True)
@@ -255,7 +258,7 @@ class MusicCommands(commands.Cog):
         voice_client.play(source, after=after_song)
 
         if self.announcement_channel:
-            embed = self.now_playing_embed(song)
+            embed = now_playing_embed(song)
             await self.announcement_channel.send(embed=embed)
 
 async def setup(bot):
