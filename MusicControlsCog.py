@@ -23,7 +23,7 @@ def get_link_type(link):
         if "/playlist/" in link or "/album/" in link:
             link_type = "spotify_playlist"
 
-    # Apple Music / ITunes Links
+    # Apple Music / iTunes Links
     if "apple" in link:
         link_type = "apple_song"
 
@@ -259,7 +259,28 @@ class MusicCommands(commands.Cog):
 
         if self.announcement_channel:
             embed = now_playing_embed(song)
-            await self.announcement_channel.send(embed=embed)
+            buttons = MusicControlButtons(self, guild)
+            await self.announcement_channel.send(embed=embed, view=buttons)
+
+class MusicControlButtons(discord.ui.View):
+    def __init__(self, cog, guild):
+        super().__init__()
+        self.cog = cog
+        self.guild = guild
+
+    @discord.ui.button(label="Play/Pause", style=discord.ButtonStyle.green, emoji="⏯️")
+    async def play_pause_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        voice_client = self.guild.voice_client
+
+        if voice_client.is_paused():
+            await self.cog.resume.callback(self.cog, interaction)
+        else:
+            await self.cog.pause.callback(self.cog, interaction)
+
+    @discord.ui.button(label="Skip", style=discord.ButtonStyle.blurple, emoji="⏭️")
+    async def skip_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.skip.callback(self.cog, interaction)
 
 async def setup(bot):
     await bot.add_cog(MusicCommands(bot))
