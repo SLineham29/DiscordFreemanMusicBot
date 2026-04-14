@@ -97,15 +97,15 @@ class SearchPlatforms:
         spotify_playlist_songs = []
 
         ytdl_spotify_playlist_options = {
-            **self.ytdl_playlist_options,
-            "default_search": "ytsearch"
+            **self.ytdl_yt_search_options,
+            "playlist_items": "1"
         }
 
         for song in playlist_songs["items"]:
             song_artist_names = f"{song["name"]} - {song["artists"][0]['name']}"
 
             results = await self.search_youtube_video(song_artist_names, ytdl_spotify_playlist_options)
-            videos = results.get("entries", [])
+            videos = list(results.get("entries", []))
             spotify_playlist_songs.append(videos[0])
 
         return spotify_playlist_songs
@@ -128,7 +128,7 @@ class SearchPlatforms:
             if parsed_results["resultCount"] != 0:
                 song_info = parsed_results["results"][0]
             else:
-                print("ITunes could not find a valid song from the given ID")
+                print("iTunes could not find a valid song from the given ID")
                 return None
         else:
             print("Invalid response from iTunes API.")

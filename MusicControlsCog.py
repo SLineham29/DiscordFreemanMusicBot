@@ -83,7 +83,7 @@ class MusicCommands(commands.Cog):
 
         link_type = get_link_type(link)
 
-        random_chance = random.randint(1, 100)
+        random_chance = random.randint(1, 75)
         if random_chance == 50:
             link = "https://youtu.be/yU6gG-p5FZc?si=u58gj53pC3m5h3vq"
             link_type = "youtube_video"
