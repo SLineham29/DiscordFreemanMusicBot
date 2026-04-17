@@ -68,7 +68,7 @@ class SearchPlatforms:
             return
 
         song = self.sp.track(song_id)
-        song_name = f"{song['name']} - {song['artists'][0]['name']}"
+        song_name = f"{song['name']} - {song['artists'][0]['name']} (Audio)"
 
         results = await self.search_youtube_video(song_name, self.ytdl_yt_search_options)
         videos = results.get("entries", [])
@@ -102,7 +102,7 @@ class SearchPlatforms:
         }
 
         for song in playlist_songs["items"]:
-            song_artist_names = f"{song["name"]} - {song["artists"][0]['name']}"
+            song_artist_names = f"{song["name"]} - {song["artists"][0]['name']} (Audio)"
 
             results = await self.search_youtube_video(song_artist_names, ytdl_spotify_playlist_options)
             videos = list(results.get("entries", []))
@@ -134,7 +134,7 @@ class SearchPlatforms:
             print("Invalid response from iTunes API.")
             return None
 
-        song_name = f"{song_info['trackName']} - {song_info['artistName']}"
+        song_name = f"{song_info['trackName']} - {song_info['artistName']} (Audio)"
 
         results = await self.search_youtube_video(song_name, self.ytdl_yt_search_options)
         videos = results.get("entries", [])
