@@ -55,11 +55,16 @@ def now_playing_embed(song):
         colour=discord.Colour.blue()
     )
     embed.add_field(name="Added By", value=f"<@{song['user_id']}>")
-
     embed.add_field(name="Length", value=datetime.timedelta(seconds=song.get("duration") or 0))
-
     embed.set_thumbnail(url=song.get("thumbnail"))
+    return embed
 
+def added_to_queue_embed(song):
+    embed = discord.Embed(
+        title="Added to Queue",
+        description=song.get("title"),
+        colour=discord.Colour.brand_green()
+    )
     return embed
 
 # In the Discord.py library a collection of commands are called 'Cogs',
@@ -118,8 +123,10 @@ class MusicCommands(commands.Cog):
                 await interaction.followup.send("Invalid link type.")
                 return
 
+        embed = added_to_queue_embed(song_info)
+        await self.announcement_channel.send(embed=embed)
+
         await self.add_to_queue(song_info, interaction, voice_client, False)
-        await interaction.followup.send(f"Added to Queue: {song_info.get("title")}", ephemeral=True)
 
     @app_commands.command(name="pause", description="Pause the song")
     async def pause(self, interaction: discord.Interaction):
