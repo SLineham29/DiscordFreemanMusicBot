@@ -81,6 +81,7 @@ class MusicCommands(commands.Cog):
     async def parse_and_play(self, interaction: discord.Interaction, link: str):
 
         await interaction.response.defer()
+        self.announcement_channel = interaction.channel
 
         voice_client = await check_if_in_server(interaction)
         if voice_client is None:
@@ -214,7 +215,6 @@ class MusicCommands(commands.Cog):
             "user_id": interaction.user.id
         }
 
-        self.announcement_channel = interaction.channel
         self.queue.append(song)
 
         if not part_of_playlist:
