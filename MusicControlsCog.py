@@ -252,9 +252,9 @@ class MusicCommands(commands.Cog):
         # The top source is if I have the FFMPEG exe stored in Windows,
         # and the other is if it's installed globally in my Raspberry Pi.
         if platform.system() == "Windows":
-            source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="bin\\ffmpeg\\ffmpeg.exe")
+            source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_options)
         else:
-            source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
+            source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_options, executable="ffmpeg")
 
         # After the song finishes, loop through this method again to get to the next song.
         def after_song(error):

@@ -17,14 +17,13 @@ class SearchPlatforms:
                              SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))
 
         self.ytdl_options = {
-            "format": "bestaudio[ext=webm][acodec=opus]/bestaudio/best",
+            "format": "251/bestaudio[acodec=opus]/bestaudio[ext=webm]/bestaudio",
             "noplaylist": True,
             "quiet": True,
             "source_address": "0.0.0.0",
             "socket_timeout": 10,
             "retries": 3,
             "skip_unavailable_fragments": True,
-            "youtube_include_dash_manifest": False,
             "extract_flat": False,
             "remote_components": ["ejs:github"],
         }
