@@ -4,6 +4,7 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import re
 import requests
+from ytmusicapi import YTMusic
 
 # This actually looks through YouTube for the video/playlist.
 def extract(query, ytdl_options):
@@ -15,6 +16,8 @@ class SearchPlatforms:
     def __init__(self, client_id, client_secret):
         self.sp = spotipy.Spotify(client_credentials_manager=
                              SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))
+
+        self.yt_music = YTMusic()
 
         self.ytdl_options = {
             "format": "251/bestaudio[acodec=opus]/bestaudio[ext=webm]/bestaudio",
@@ -43,7 +46,6 @@ class SearchPlatforms:
     # This makes an async loop to run the YouTube searcher in a new thread.
     async def search_youtube_video(self, link, ytdl_options=None):
         ytdl_options = ytdl_options or self.ytdl_options
-
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, lambda: extract(link, ytdl_options))
 
@@ -51,7 +53,21 @@ class SearchPlatforms:
         playlist_links = await self.search_youtube_video(link, self.ytdl_playlist_options)
         return playlist_links
 
-    async def search_spotify_video(self, link):
+    async def search_youtube_music(self, song_name, search_filter):
+        results = self.yt_music.search(song_name, filter=search_filter, limit=1)
+
+        song_info = results[0]
+        song = {
+            **song_info,
+            "url": 'https://youtube.com/watch?v=' + song_info['videoId'],
+            "duration": song_info['duration_seconds'],
+            "thumbnail": song_info['thumbnails'][-1]['url'],
+            "artist": song_info['artists'][0]['name'],
+        }
+
+        return song
+
+    async def search_spotify_song(self, link):
 
         # # Capture anything after track, and before the next symbol, which should be the end of the ID.
         if re.search('spotify.link', link):
@@ -59,7 +75,6 @@ class SearchPlatforms:
             link = web_response.url
 
         id_search = re.search(r'/track/([a-zA-Z0-9]+)', link)
-
         if id_search:
             song_id = id_search.group(1)
         else:
@@ -67,12 +82,9 @@ class SearchPlatforms:
             return
 
         song = self.sp.track(song_id)
-        song_name = f"{song['name']} - {song['artists'][0]['name']} (Audio)"
+        song_name = f"{song['name']} - {song['artists'][0]['name']}"
 
-        results = await self.search_youtube_video(song_name, self.ytdl_yt_search_options)
-        videos = results.get("entries", [])
-
-        song = videos[0]
+        song = await self.search_youtube_music(song_name, 'songs')
         return song
 
     async def search_spotify_playlist(self, link):
@@ -133,10 +145,7 @@ class SearchPlatforms:
             print("Invalid response from iTunes API.")
             return None
 
-        song_name = f"{song_info['trackName']} - {song_info['artistName']} (Audio)"
+        song_name = f"{song_info['trackName']} - {song_info['artistName']}"
 
-        results = await self.search_youtube_video(song_name, self.ytdl_yt_search_options)
-        videos = results.get("entries", [])
-
-        song = videos[0]
+        song = await self.search_youtube_music(song_name, 'songs')
         return song

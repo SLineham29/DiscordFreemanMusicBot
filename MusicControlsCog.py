@@ -54,6 +54,7 @@ def now_playing_embed(song):
         description=song.get("title"),
         colour=discord.Colour.blue()
     )
+    embed.add_field(name="By", value=song.get("artist", "Unknown"), inline=False)
     embed.add_field(name="Added By", value=f"<@{song['user_id']}>")
     embed.add_field(name="Length", value=datetime.timedelta(seconds=song.get("duration") or 0))
     embed.set_thumbnail(url=song.get("thumbnail"))
@@ -88,6 +89,7 @@ class MusicCommands(commands.Cog):
             return
 
         link_type = get_link_type(link)
+        link_is_decoded = True
 
         random_chance = random.randint(1, 75)
         if random_chance == 50:
@@ -100,26 +102,26 @@ class MusicCommands(commands.Cog):
                 song_info = await self.searcher.search_youtube_video(link)
             case "youtube_playlist":
                 playlist_info = await self.searcher.search_youtube_playlist(link)
-                print(playlist_info)
                 playlist_songs = playlist_info.get("entries", [])
                 for i, song in enumerate(playlist_songs):
                     not_last_song = (i != len(playlist_songs) - 1)
-                    await self.add_to_queue(song, interaction, voice_client, not_last_song)
+                    await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
                 await interaction.followup.send(
                     f"Added {len(playlist_songs)} songs from {playlist_info.get("title")} to the queue")
                 return
             case "spotify_song":
-                song_info = await self.searcher.search_spotify_video(link)
+                song_info = await self.searcher.search_spotify_song(link)
+                link_is_decoded = False
             case "spotify_playlist":
                 playlist_info = await self.searcher.search_spotify_playlist(link)
-                print(playlist_info)
                 for i, song in enumerate(playlist_info):
                     not_last_song = (i != len(playlist_info) - 1)
-                    await self.add_to_queue(song, interaction, voice_client, not_last_song)
+                    await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
                 await interaction.followup.send(f"Added {len(playlist_info)} songs from a Spotify playlist to the queue")
                 return
             case "apple_song":
                 song_info = await self.searcher.search_apple_song(link)
+                link_is_decoded = False
             case _:
                 await interaction.followup.send("Invalid link type.")
                 return
@@ -127,7 +129,7 @@ class MusicCommands(commands.Cog):
         embed = added_to_queue_embed(song_info)
         await self.announcement_channel.send(embed=embed)
 
-        await self.add_to_queue(song_info, interaction, voice_client, False)
+        await self.add_to_queue(song_info, interaction, voice_client, False, False, link_is_decoded)
 
     @app_commands.command(name="pause", description="Pause the song")
     async def pause(self, interaction: discord.Interaction):
@@ -205,19 +207,18 @@ class MusicCommands(commands.Cog):
                 queue_songs += f"{position + 1}) {song.get('title')}\n"
             await interaction.followup.send(queue_songs)
 
-    async def add_to_queue(self, song_info, interaction, voice_client, part_of_playlist):
+    async def add_to_queue(self, song_info, interaction, voice_client, part_of_playlist, last_song, is_decoded_link):
 
         song = {
-            "url": song_info.get("url"),
-            "title": song_info.get("title", "Untitled"),
-            "duration": song_info.get("duration"),
-            "thumbnail": song_info.get("thumbnail"),
-            "user_id": interaction.user.id
+            **song_info,
+            "user_id": interaction.user.id,
+            "playlistSong": part_of_playlist,
+            "decodedLink": is_decoded_link
         }
 
         self.queue.append(song)
 
-        if not part_of_playlist:
+        if not last_song:
             if not voice_client.is_playing() and not voice_client.is_paused():
                 await self.next_song(interaction.guild)
 
@@ -236,12 +237,11 @@ class MusicCommands(commands.Cog):
 
         song = self.queue.pop(0)
 
-        # If the song is from a playlist, it doesn't have the correct URL attached to it, so we need to convert it
-        # before playback. This needs to be done here rather than on queue addition because otherwise the Youtube servers
+        # If the song is from a playlist or a non-Youtube link, it doesn't have the correct URL attached to it, so we need to convert it
+        # before playback. This needs to be done here rather than on queue addition because otherwise the YouTube servers
         # could be called multiple times at once, which might result in an IP timeout.
-        if "youtu" in song["url"]:
+        if not song['decodedLink']:
             audio_url = await self.searcher.search_youtube_video(song["url"])
-
             song["url"] = audio_url.get("url")
 
         ffmpeg_options = {
