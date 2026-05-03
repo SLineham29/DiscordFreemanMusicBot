@@ -68,6 +68,28 @@ def added_to_queue_embed(song):
     )
     return embed
 
+def see_queue_embed(queue):
+    if len(queue) == 0:
+        embed = discord.Embed(
+            title="There is currently nothing in the queue.",
+            colour=discord.Colour.brand_red()
+        )
+        return embed
+    elif len(queue) == 1:
+        embed = discord.Embed(
+            title="There is currently 1 song in the queue:",
+            colour=discord.Colour.blue()
+        )
+    else:
+        embed = discord.Embed(
+            title=f"There are currently {len(queue)} songs in the queue:",
+            colour=discord.Colour.blue()
+        )
+
+    for position, song in enumerate(queue):
+        embed.add_field(name=f"{position + 1})", value=f"{song.get('title')} - {song.get('artist')}", inline=False)
+    return embed
+
 # In the Discord.py library a collection of commands are called 'Cogs',
 # which means that this class is a 'Cog' containing all the music commands.
 class MusicCommands(commands.Cog):
@@ -125,6 +147,10 @@ class MusicCommands(commands.Cog):
             case _:
                 await interaction.followup.send("Invalid link type.")
                 return
+
+        if song_info is None:
+            await interaction.followup.send("Could not find a valid song within this link.")
+            return
 
         embed = added_to_queue_embed(song_info)
         await self.announcement_channel.send(embed=embed)
@@ -192,20 +218,7 @@ class MusicCommands(commands.Cog):
 
     @app_commands.command(name="queue", description="See what's currently in the queue")
     async def see_current_queue(self, interaction: discord.Interaction):
-
-        await interaction.response.defer()
-
-        if len(self.queue) == 0:
-            await interaction.followup.send("There is currently nothing in the queue.")
-        elif len(self.queue) == 1:
-            queue_songs = f"There is currently 1 song in the queue:\n\n"
-            queue_songs += f"1) {self.queue[0].get('title')}"
-            await interaction.followup.send(queue_songs)
-        else:
-            queue_songs = f"There are currently {len(self.queue)} songs in the queue:\n\n"
-            for position, song in enumerate(self.queue):
-                queue_songs += f"{position + 1}) {song.get('title')}\n"
-            await interaction.followup.send(queue_songs)
+        await self.announcement_channel.send(embed=see_queue_embed(self.queue))
 
     async def add_to_queue(self, song_info, interaction, voice_client, part_of_playlist, last_song, is_decoded_link):
 
@@ -215,6 +228,10 @@ class MusicCommands(commands.Cog):
             "playlistSong": part_of_playlist,
             "decodedLink": is_decoded_link
         }
+
+        # If YouTube didn't get the artist name, just use the name of the uploader channel instead.
+        if 'artist' not in song:
+            song['artist'] = song_info['channel']
 
         self.queue.append(song)
 
