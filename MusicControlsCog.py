@@ -289,5 +289,9 @@ class MusicControlButtons(discord.ui.View):
     async def skip_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.cog.skip.callback(self.cog, interaction)
 
+    @discord.ui.button(label="See Queue", style=discord.ButtonStyle.gray, emoji="📃")
+    async def see_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.cog.see_current_queue.callback(self.cog, interaction)
+
 async def setup(bot):
     await bot.add_cog(MusicCommands(bot))
