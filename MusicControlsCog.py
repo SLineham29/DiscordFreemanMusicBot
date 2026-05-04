@@ -10,22 +10,24 @@ from SearchPlatforms import SearchPlatforms
 
 def get_link_type(link):
     link_type = "video"
+    link = link.lower()
 
-    # Youtube links
+    # YouTube links
     if "youtu" in link:
-        link_type = "youtube_video"
         if "list=" in link:
-            link_type = "youtube_playlist"
+            return "youtube_playlist"
+        return "youtube_video"
 
     # Spotify Links
     if "spotify" in link:
-        link_type = "spotify_song"
         if "/playlist/" in link or "/album/" in link:
-            link_type = "spotify_playlist"
+            return "spotify_playlist"
+        return "spotify_song"
 
     # Apple Music / iTunes Links
-    if "apple" in link:
-        link_type = "apple_song"
+    # Just in case someone looks for a YouTube video with the word "apple" in it, there's an extra check for the song ID.
+    if "apple" in link and "i=" in link:
+        return "apple_song"
 
     return link_type
 
@@ -99,8 +101,8 @@ class MusicCommands(commands.Cog):
         self.announcement_channel = None
         self.searcher = SearchPlatforms(os.getenv("SPOTIPY_CLIENT_ID"), os.getenv("SPOTIPY_CLIENT_SECRET"))
 
-    @app_commands.command(name="play", description="Play a Youtube / Spotify / Apple Music song or playlist")
-    @app_commands.describe(link="A YouTube / Spotify / Apple Music link")
+    @app_commands.command(name="play", description="Play a Youtube / Spotify / Apple Music song, video, or playlist")
+    @app_commands.describe(link="A YouTube / Spotify / Apple Music link, or YouTube search query")
     async def parse_and_play(self, interaction: discord.Interaction, link: str):
 
         await interaction.response.defer()
@@ -120,6 +122,8 @@ class MusicCommands(commands.Cog):
             await interaction.followup.send("Congratulations, your link has been randomly selected to turn into Skin by Rag'n'Bone Man!")
 
         match link_type:
+            case "video":
+                song_info = await self.searcher.search_youtube_with_query(link)
             case "youtube_video":
                 song_info = await self.searcher.search_youtube_video(link)
             case "youtube_playlist":

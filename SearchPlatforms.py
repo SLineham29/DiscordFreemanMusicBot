@@ -49,6 +49,13 @@ class SearchPlatforms:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, lambda: extract(link, ytdl_options))
 
+    async def search_youtube_with_query(self, query):
+        results = await self.search_youtube_video(query, self.ytdl_yt_search_options)
+        entries = results.get("entries", [])
+        if not entries:
+            return None
+        return entries[0]
+
     async def search_youtube_playlist(self, link):
         playlist_links = await self.search_youtube_video(link, self.ytdl_playlist_options)
         return playlist_links
