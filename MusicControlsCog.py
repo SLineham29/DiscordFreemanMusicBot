@@ -119,7 +119,7 @@ class MusicCommands(commands.Cog):
         if random_chance == 50:
             link = "https://youtu.be/yU6gG-p5FZc?si=u58gj53pC3m5h3vq"
             link_type = "youtube_video"
-            await interaction.followup.send("Congratulations, your link has been randomly selected to turn into Skin by Rag'n'Bone Man!")
+            await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Skin by Rag'n'Bone Man!")
 
         match link_type:
             case "video":
@@ -156,69 +156,51 @@ class MusicCommands(commands.Cog):
             await interaction.followup.send("Could not find a valid song within this link.")
             return
 
-        embed = added_to_queue_embed(song_info)
-        await self.announcement_channel.send(embed=embed)
-
+        await interaction.followup.send(embed=added_to_queue_embed(song_info))
         await self.add_to_queue(song_info, interaction, voice_client, False, False, link_is_decoded)
 
     @app_commands.command(name="pause", description="Pause the song")
     async def pause(self, interaction: discord.Interaction):
         await interaction.response.send_message("Pausing...", ephemeral=True)
-
         voice_client = await(check_if_in_server(interaction))
         if voice_client is None:
             return
-
         voice_client.pause()
 
     @app_commands.command(name="resume", description="Resume the song")
     async def resume(self, interaction: discord.Interaction):
         await interaction.response.send_message("Resuming...", ephemeral=True)
-
         voice_client = await(check_if_in_server(interaction))
         if voice_client is None:
             return
-
         voice_client.resume()
 
     @app_commands.command(name="skip", description="Skip the current song and go to the next one in the queue")
     async def skip(self, interaction: discord.Interaction):
-
         await interaction.response.send_message("Skipping...", ephemeral=True)
-
         voice_client = await(check_if_in_server(interaction))
         if voice_client is None:
             await interaction.followup.send("The bot is not in a call.", ephemeral=True)
             return
-
         voice_client.stop()
 
     @app_commands.command(name="stop", description="Stop the current song and clear the queue")
     async def stop(self, interaction: discord.Interaction):
-
         voice_client = await(check_if_in_server(interaction))
         if voice_client is None:
-            await interaction.followup.send("The bot is not in a call.")
+            await interaction.response.send_message("The bot is not in a call.", ephemeral=True)
             return
-
         voice_client.stop()
         self.queue.clear()
-
-        await interaction.followup.send("Song has stopped and queue has been cleared.", ephemeral=True)
+        await interaction.response.send_message("Song has stopped and queue has been cleared.", ephemeral=True)
 
     @app_commands.command(name="leave", description="Leave the call.")
     async def disconnect(self, interaction: discord.Interaction):
-
-        await interaction.response.defer()
-
         voice_client = await(check_if_in_server(interaction))
         if voice_client is None:
-            await interaction.followup.send("The bot is not in a call.")
             return
-
         await voice_client.disconnect()
-
-        await interaction.followup.send("I have left the call.")
+        await interaction.response.send_message("Left the call.", ephemeral=True)
 
     @app_commands.command(name="queue", description="See what's currently in the queue")
     async def see_current_queue(self, interaction: discord.Interaction):
@@ -252,7 +234,7 @@ class MusicCommands(commands.Cog):
 
         if len(self.queue) == 0:
             if self.announcement_channel:
-                await self.announcement_channel.send("All songs have now been played. Leaving call.")
+                await self.announcement_channel.send("All songs have now been played. Leaving call.", delete_after=10)
             await voice_client.disconnect()
             return
 
@@ -298,9 +280,10 @@ class MusicControlButtons(discord.ui.View):
 
     @discord.ui.button(label="Play/Pause", style=discord.ButtonStyle.green, emoji="⏯️")
     async def play_pause_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-
         voice_client = self.guild.voice_client
-
+        if voice_client is None:
+            await interaction.response.send_message("The bot is not in a call.", ephemeral=True)
+            return
         if voice_client.is_paused():
             await self.cog.resume.callback(self.cog, interaction)
         else:
@@ -312,6 +295,7 @@ class MusicControlButtons(discord.ui.View):
 
     @discord.ui.button(label="See Queue", style=discord.ButtonStyle.gray, emoji="📃")
     async def see_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         await self.cog.see_current_queue.callback(self.cog, interaction)
 
 async def setup(bot):
