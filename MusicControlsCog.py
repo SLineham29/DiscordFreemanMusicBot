@@ -223,11 +223,12 @@ class MusicCommands(commands.Cog):
 
         if not last_song:
             if not voice_client.is_playing() and not voice_client.is_paused():
-                await self.next_song(interaction.guild)
+                await self.next_song(interaction)
 
-    async def next_song(self, guild):
+    async def next_song(self, interaction: discord.Interaction):
 
-        voice_client = guild.voice_client
+        voice_client = interaction.guild.voice_client
+        voice_channel = interaction.user.voice.channel
 
         if not voice_client:
             return
@@ -235,6 +236,7 @@ class MusicCommands(commands.Cog):
         if len(self.queue) == 0:
             if self.announcement_channel:
                 await self.announcement_channel.send("All songs have now been played. Leaving call.", delete_after=10)
+            await voice_channel.edit(status="")
             await voice_client.disconnect()
             return
 
@@ -263,13 +265,14 @@ class MusicCommands(commands.Cog):
         def after_song(error):
             if error:
                 print(f"Error while playing:{error}")
-            asyncio.run_coroutine_threadsafe(self.next_song(guild), self.bot.loop)
+            asyncio.run_coroutine_threadsafe(self.next_song(interaction), self.bot.loop)
 
         voice_client.play(source, after=after_song)
+        await voice_channel.edit(status=f"Playing: {song.get('title')}")
 
         if self.announcement_channel:
             embed = now_playing_embed(song)
-            buttons = MusicControlButtons(self, guild)
+            buttons = MusicControlButtons(self, interaction.guild)
             await self.announcement_channel.send(embed=embed, view=buttons)
 
 class MusicControlButtons(discord.ui.View):
