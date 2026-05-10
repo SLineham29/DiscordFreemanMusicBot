@@ -63,6 +63,10 @@ class SearchPlatforms:
     async def search_youtube_music(self, song_name, search_filter):
         results = self.yt_music.search(song_name, filter=search_filter, limit=1)
 
+        if not results:
+            song = self.search_youtube_with_query(song_name)
+            return song
+
         song_info = results[0]
         song = {
             **song_info,
