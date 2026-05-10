@@ -9,7 +9,7 @@ import asyncio
 from SearchPlatforms import SearchPlatforms
 
 def get_link_type(link):
-    link_type = "video"
+    link_type = "query"
     link = link.lower()
 
     # YouTube links
@@ -20,9 +20,12 @@ def get_link_type(link):
 
     # Spotify Links
     if "spotify" in link:
-        if "/playlist/" in link or "/album/" in link:
+        if "/playlist/" in link:
             return "spotify_playlist"
-        return "spotify_song"
+        elif "/album/" in link:
+            return "spotify_album"
+        else:
+            return "spotify_song"
 
     # Apple Music / iTunes Links
     # Just in case someone looks for a YouTube video with the word "apple" in it, there's an extra check for the song ID.
@@ -68,6 +71,16 @@ def added_to_queue_embed(song):
         description=song.get("title"),
         colour=discord.Colour.brand_green()
     )
+    return embed
+
+def added_album_to_queue_embed(album):
+    embed = discord.Embed(
+        title="Added an Album to the Queue",
+        description=f"{album.get('title')} by {album.get('artist')}",
+        colour=discord.Colour.brand_green()
+    )
+    embed.add_field(name="Song Count", value=f"{album.get('track_count')}")
+    embed.set_thumbnail(url=album.get("thumbnail"))
     return embed
 
 def see_queue_embed(queue):
@@ -122,7 +135,7 @@ class MusicCommands(commands.Cog):
             await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Skin by Rag'n'Bone Man!")
 
         match link_type:
-            case "video":
+            case "query":
                 song_info = await self.searcher.search_youtube_with_query(link)
             case "youtube_video":
                 song_info = await self.searcher.search_youtube_video(link)
@@ -139,11 +152,18 @@ class MusicCommands(commands.Cog):
                 song_info = await self.searcher.search_spotify_song(link)
                 link_is_decoded = False
             case "spotify_playlist":
-                playlist_info = await self.searcher.search_spotify_playlist(link)
-                for i, song in enumerate(playlist_info):
-                    not_last_song = (i != len(playlist_info) - 1)
+                album_info, playlist_songs = await self.searcher.search_spotify_playlist(link)
+                for i, song in enumerate(playlist_songs):
+                    not_last_song = (i != len(playlist_songs) - 1)
                     await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
-                await interaction.followup.send(f"Added {len(playlist_info)} songs from a Spotify playlist to the queue")
+                await interaction.followup.send(f"Added {len(playlist_songs)} songs from a Spotify playlist to the queue")
+                return
+            case "spotify_album":
+                album_info, playlist_songs = await self.searcher.search_spotify_album(link)
+                for i, song in enumerate(playlist_songs):
+                    not_last_song = (i != len(playlist_songs) - 1)
+                    await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
+                await interaction.followup.send(embed=added_album_to_queue_embed(album_info))
                 return
             case "apple_song":
                 song_info = await self.searcher.search_apple_song(link)

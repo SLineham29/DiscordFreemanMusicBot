@@ -99,24 +99,20 @@ class SearchPlatforms:
         return song
 
     async def search_spotify_playlist(self, link):
+        spotify_playlist_songs = []
+
         # # Capture anything after track, and before the next symbol, which should be the end of the ID.
         if re.search('spotify.link', link):
             web_response = requests.head(link, allow_redirects=True, timeout=5)
             link = web_response.url
 
         playlist_id_search = re.search(r'/playlist/([a-zA-Z0-9]+)', link)
-        album_id_search = re.search(r'/album/([a-zA-Z0-9]+)', link)
-        if playlist_id_search:
-            playlist_id = playlist_id_search.group(1)
-            playlist_songs = self.sp.playlist_items(playlist_id)
-        elif album_id_search:
-            album_id = album_id_search.group(1)
-            playlist_songs = self.sp.album_tracks(album_id)
-        else:
+        if not playlist_id_search:
             print("Could not find a valid Spotify playlist ID in this link.")
             return None
 
-        spotify_playlist_songs = []
+        playlist_id = playlist_id_search.group(1)
+        playlist_songs = self.sp.playlist_items(playlist_id)
 
         ytdl_spotify_playlist_options = {
             **self.ytdl_yt_search_options,
@@ -125,12 +121,60 @@ class SearchPlatforms:
 
         for song in playlist_songs["items"]:
             song_artist_names = f"{song["name"]} - {song["artists"][0]['name']} (Audio)"
-
             results = await self.search_youtube_video(song_artist_names, ytdl_spotify_playlist_options)
             videos = list(results.get("entries", []))
             spotify_playlist_songs.append(videos[0])
-
         return spotify_playlist_songs
+
+    async def search_spotify_album(self, link):
+        album_songs = []
+
+        if re.search('spotify.link', link):
+            web_response = requests.head(link, allow_redirects=True, timeout=5)
+            link = web_response.url
+
+        album_id_search = re.search(r'/album/([a-zA-Z0-9]+)', link)
+        if not album_id_search:
+            print("Could not find a valid Spotify album ID in this link.")
+            return None
+
+        album_id = album_id_search.group(1)
+        album_info = self.sp.album(album_id)
+        album_query = f"{album_info['name']} - {album_info['artists'][0]['name']}"
+
+        yt_album = self.yt_music.search(album_query, filter='albums', limit=1)
+        if not yt_album:
+            ytdl_spotify_playlist_options = {
+                **self.ytdl_yt_search_options,
+                "playlist_items": "1"
+            }
+
+            playlist_songs = self.sp.album_tracks(album_id)
+
+            for song in playlist_songs["items"]:
+                song_artist_names = f"{song["name"]} - {song["artists"][0]['name']} (Audio)"
+                results = await self.search_youtube_video(song_artist_names, ytdl_spotify_playlist_options)
+                videos = list(results.get("entries", []))
+                album_songs.append(videos[0])
+            return album_songs
+
+        album_song_info = self.yt_music.get_album(yt_album[0]['browseId'])
+        album_details = {
+            "title": album_song_info["title"],
+            "artist": album_song_info['artists'][0]['name'],
+            "thumbnail": album_song_info['thumbnails'][-1]['url'],
+            "track_count": album_song_info['trackCount'],
+        }
+        for song in album_song_info['tracks']:
+            song_info = {
+                "url": 'https://youtube.com/watch?v=' + song['videoId'],
+                "title": song['title'],
+                "duration": song['duration_seconds'],
+                "thumbnail": album_details['thumbnail'],
+                "artist": song['artists'][0]['name'],
+            }
+            album_songs.append(song_info)
+        return album_details, album_songs
 
     async def search_apple_song(self, link):
         id_search = re.search(r'i=([a-zA-Z0-9]+)', link)
