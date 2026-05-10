@@ -12,6 +12,23 @@ def extract(query, ytdl_options):
         result = ytdl.extract_info(query, download=False)
     return result
 
+def search_itunes_for_info(song_id):
+    # Instead of paying £80 a year for Apple developer access, they keep this simple lookup page free to use to
+    # quickly get song and playlist information from a given ID.
+    itunes_search_link = f"https://itunes.apple.com/lookup?id={song_id}"
+    json_results = requests.get(itunes_search_link)
+
+    if json_results.status_code == 200:
+        parsed_results = json_results.json()
+        if parsed_results["resultCount"] != 0:
+            return parsed_results["results"][0]
+        else:
+            print("iTunes could not find a valid song from the given ID")
+            return None
+    else:
+        print(f"Invalid response from iTunes API: Status {json_results.status_code}")
+        return None
+
 class SearchPlatforms:
     def __init__(self, client_id, client_secret):
         self.sp = spotipy.Spotify(client_credentials_manager=
@@ -77,6 +94,28 @@ class SearchPlatforms:
         }
 
         return song
+
+    async def search_youtube_music_for_album(self, album_query):
+        album_songs = []
+        yt_album = self.yt_music.search(album_query, filter='albums', limit=1)
+
+        album_song_info = self.yt_music.get_album(yt_album[0]['browseId'])
+        album_details = {
+            "title": album_song_info["title"],
+            "artist": album_song_info['artists'][0]['name'],
+            "thumbnail": album_song_info['thumbnails'][-1]['url'],
+            "track_count": album_song_info['trackCount'],
+        }
+        for song in album_song_info['tracks']:
+            song_info = {
+                "url": 'https://youtube.com/watch?v=' + song['videoId'],
+                "title": song['title'],
+                "duration": song['duration_seconds'],
+                "thumbnail": album_details['thumbnail'],
+                "artist": song['artists'][0]['name'],
+            }
+            album_songs.append(song_info)
+        return album_details, album_songs
 
     async def search_spotify_song(self, link):
 
@@ -158,23 +197,7 @@ class SearchPlatforms:
                 album_songs.append(videos[0])
             return album_songs
 
-        album_song_info = self.yt_music.get_album(yt_album[0]['browseId'])
-        album_details = {
-            "title": album_song_info["title"],
-            "artist": album_song_info['artists'][0]['name'],
-            "thumbnail": album_song_info['thumbnails'][-1]['url'],
-            "track_count": album_song_info['trackCount'],
-        }
-        for song in album_song_info['tracks']:
-            song_info = {
-                "url": 'https://youtube.com/watch?v=' + song['videoId'],
-                "title": song['title'],
-                "duration": song['duration_seconds'],
-                "thumbnail": album_details['thumbnail'],
-                "artist": song['artists'][0]['name'],
-            }
-            album_songs.append(song_info)
-        return album_details, album_songs
+        return await self.search_youtube_music_for_album(album_query)
 
     async def search_apple_song(self, link):
         id_search = re.search(r'i=([a-zA-Z0-9]+)', link)
@@ -184,23 +207,25 @@ class SearchPlatforms:
 
         song_id = id_search.group(1)
 
-        # Instead of paying £80 a year for Apple developer access, they keep this simple lookup page free to use to
-        # quickly get song and playlist information from a given ID.
-        itunes_search_link = f"https://itunes.apple.com/lookup?id={song_id}"
-        json_results = requests.get(itunes_search_link)
-
-        if json_results.status_code == 200:
-            parsed_results = json_results.json()
-            if parsed_results["resultCount"] != 0:
-                song_info = parsed_results["results"][0]
-            else:
-                print("iTunes could not find a valid song from the given ID")
-                return None
-        else:
-            print("Invalid response from iTunes API.")
-            return None
+        song_info = search_itunes_for_info(song_id)
 
         song_name = f"{song_info['trackName']} - {song_info['artistName']}"
 
         song = await self.search_youtube_music(song_name, 'songs')
         return song
+
+    async def search_apple_album(self, link):
+        id_search = re.search(r'/album/.*/(\d+)', link)
+
+        if not id_search:
+            print("Could not find a valid iTunes ID in this link.")
+
+        song_id = id_search.group(1)
+
+        itunes_info = search_itunes_for_info(song_id)
+
+        print(itunes_info)
+
+        album_query = f"{itunes_info['collectionName']} - {itunes_info['artistName']}"
+
+        return await self.search_youtube_music_for_album(album_query)

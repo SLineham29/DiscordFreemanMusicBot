@@ -28,9 +28,12 @@ def get_link_type(link):
             return "spotify_song"
 
     # Apple Music / iTunes Links
-    # Just in case someone looks for a YouTube video with the word "apple" in it, there's an extra check for the song ID.
-    if "apple" in link and "i=" in link:
-        return "apple_song"
+    # Just in case someone looks for a YouTube video with the word "apple" in it, there's an extra check.
+    if "music.apple" in link:
+        if "i=" in link:
+            return "apple_song"
+        else:
+            return "apple_album"
 
     return link_type
 
@@ -114,7 +117,7 @@ class MusicCommands(commands.Cog):
         self.announcement_channel = None
         self.searcher = SearchPlatforms(os.getenv("SPOTIPY_CLIENT_ID"), os.getenv("SPOTIPY_CLIENT_SECRET"))
 
-    @app_commands.command(name="play", description="Play a Youtube / Spotify / Apple Music song, video, or playlist")
+    @app_commands.command(name="play", description="Play a YouTube / Spotify / Apple Music song, video, or playlist")
     @app_commands.describe(link="A YouTube / Spotify / Apple Music link, or YouTube search query")
     async def parse_and_play(self, interaction: discord.Interaction, link: str):
 
@@ -168,6 +171,13 @@ class MusicCommands(commands.Cog):
             case "apple_song":
                 song_info = await self.searcher.search_apple_song(link)
                 link_is_decoded = False
+            case "apple_album":
+                album_info, playlist_songs = await self.searcher.search_apple_album(link)
+                for i, song in enumerate(playlist_songs):
+                    not_last_song = (i != len(playlist_songs) - 1)
+                    await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
+                await interaction.followup.send(embed=added_album_to_queue_embed(album_info))
+                return
             case _:
                 await interaction.followup.send("Invalid link type.")
                 return
