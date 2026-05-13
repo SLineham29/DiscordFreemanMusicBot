@@ -15,7 +15,7 @@ def extract(query, ytdl_options):
 def search_itunes_for_info(song_id):
     # Instead of paying £80 a year for Apple developer access, they keep this simple lookup page free to use to
     # quickly get song and playlist information from a given ID.
-    itunes_search_link = f"https://itunes.apple.com/lookup?id={song_id}"
+    itunes_search_link = f"https://itunes.apple.com/lookup?id={song_id}&country=gb"
     json_results = requests.get(itunes_search_link)
 
     if json_results.status_code == 200:
@@ -81,7 +81,8 @@ class SearchPlatforms:
         results = self.yt_music.search(song_name, filter=search_filter, limit=1)
 
         if not results:
-            song = self.search_youtube_with_query(song_name)
+            song_name += " (Audio)"
+            song = await self.search_youtube_with_query(song_name)
             return song
 
         song_info = results[0]
@@ -223,8 +224,6 @@ class SearchPlatforms:
         song_id = id_search.group(1)
 
         itunes_info = search_itunes_for_info(song_id)
-
-        print(itunes_info)
 
         album_query = f"{itunes_info['collectionName']} - {itunes_info['artistName']}"
 
