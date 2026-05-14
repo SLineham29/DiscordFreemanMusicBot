@@ -104,8 +104,11 @@ def see_queue_embed(queue):
             colour=discord.Colour.blue()
         )
 
+    queue_runtime = 0
     for position, song in enumerate(queue):
         embed.add_field(name=f"{position + 1})", value=f"{song.get('title')} - {song.get('artist')}", inline=False)
+        queue_runtime += song.get('duration')
+    embed.add_field(name="Total Runtime", value=datetime.timedelta(seconds=queue_runtime))
     return embed
 
 # In the Discord.py library a collection of commands are called 'Cogs',
