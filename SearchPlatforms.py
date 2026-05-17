@@ -74,8 +74,17 @@ class SearchPlatforms:
         return entries[0]
 
     async def search_youtube_playlist(self, link):
-        playlist_links = await self.search_youtube_video(link, self.ytdl_playlist_options)
-        return playlist_links
+        playlist_info = await self.search_youtube_video(link, self.ytdl_playlist_options)
+        playlist_details = {
+            "title": playlist_info["title"],
+            "author": playlist_info["uploader"],
+            "thumbnail": playlist_info["thumbnails"][-1]["url"],
+            "track_count": playlist_info["playlist_count"]
+        }
+        playlist_songs = playlist_info.get("entries", [])
+        for song in playlist_songs:
+            song["thumbnail"] = song["thumbnails"][-1]["url"]
+        return playlist_details, playlist_songs
 
     async def search_youtube_music_song(self, song_name):
         results = self.yt_music.search(song_name, filter='songs', limit=1)

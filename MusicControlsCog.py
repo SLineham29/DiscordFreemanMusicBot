@@ -157,13 +157,8 @@ class MusicCommands(commands.Cog):
             case "youtube_video":
                 song_info = await self.searcher.search_youtube_video(link)
             case "youtube_playlist":
-                playlist_info = await self.searcher.search_youtube_playlist(link)
-                playlist_songs = playlist_info.get("entries", [])
-                for i, song in enumerate(playlist_songs):
-                    not_last_song = (i != len(playlist_songs) - 1)
-                    await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
-                await interaction.followup.send(
-                    f"Added {len(playlist_songs)} songs from {playlist_info.get("title")} to the queue")
+                playlist_info, playlist_songs = await self.searcher.search_youtube_playlist(link)
+                await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs)
                 return
             case "spotify_song":
                 song_info = await self.searcher.search_spotify_song(link)
