@@ -2,6 +2,7 @@ import os
 import platform
 import random
 import datetime
+from typing import Literal
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -86,6 +87,16 @@ def added_album_to_queue_embed(album):
     embed.set_thumbnail(url=album.get("thumbnail"))
     return embed
 
+def added_playlist_to_queue_embed(playlist):
+    embed = discord.Embed(
+        title="Added a Playlist to the Queue",
+        description=f"{playlist.get('title')} - Created by {playlist.get('author')}",
+        colour=discord.Colour.brand_green()
+    )
+    embed.add_field(name="Song Count", value=f"{playlist.get('track_count')}")
+    embed.set_thumbnail(url=playlist.get("thumbnail"))
+    return embed
+
 def see_queue_embed(queue):
     if len(queue) == 0:
         embed = discord.Embed(
@@ -165,21 +176,15 @@ class MusicCommands(commands.Cog):
                 await interaction.followup.send(f"Added {len(playlist_songs)} songs from a Spotify playlist to the queue")
                 return
             case "spotify_album":
-                album_info, playlist_songs = await self.searcher.search_spotify_album(link)
-                for i, song in enumerate(playlist_songs):
-                    not_last_song = (i != len(playlist_songs) - 1)
-                    await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
-                await interaction.followup.send(embed=added_album_to_queue_embed(album_info))
+                album_info, album_songs = await self.searcher.search_spotify_album(link)
+                await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
                 return
             case "apple_song":
                 song_info = await self.searcher.search_apple_song(link)
                 link_is_decoded = False
             case "apple_album":
-                album_info, playlist_songs = await self.searcher.search_apple_album(link)
-                for i, song in enumerate(playlist_songs):
-                    not_last_song = (i != len(playlist_songs) - 1)
-                    await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
-                await interaction.followup.send(embed=added_album_to_queue_embed(album_info))
+                album_info, album_songs = await self.searcher.search_apple_album(link)
+                await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
                 return
             case _:
                 await interaction.followup.send("Invalid link type.")
@@ -191,6 +196,28 @@ class MusicCommands(commands.Cog):
 
         await interaction.followup.send(embed=added_to_queue_embed(song_info))
         await self.add_to_queue(song_info, interaction, voice_client, False, False, link_is_decoded)
+
+    @app_commands.command(name="search", description="Search for a song, album, or playlist on YTMusic")
+    @app_commands.describe(query="A YTMusic search query")
+    async def search(self, interaction: discord.Interaction, query: str, search_filter: Literal["Song", "Album", "Playlist"] = "Song"):
+        await interaction.response.defer()
+        self.announcement_channel = interaction.channel
+
+        voice_client = await check_if_in_server(interaction)
+        if voice_client is None:
+            return
+
+        match search_filter:
+            case "Song":
+                song_info = await self.searcher.search_youtube_music_song(query)
+                await interaction.followup.send(embed=added_to_queue_embed(song_info))
+                await self.add_to_queue(song_info, interaction, voice_client, False, False, False)
+            case "Album":
+                album_info, album_songs = await self.searcher.search_youtube_music_album(query)
+                await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
+            case "Playlist":
+                playlist_info, playlist_songs = await self.searcher.search_youtube_music_playlist(query)
+                await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs)
 
     @app_commands.command(name="pause", description="Pause the song")
     async def pause(self, interaction: discord.Interaction):
@@ -238,6 +265,18 @@ class MusicCommands(commands.Cog):
     @app_commands.command(name="queue", description="See what's currently in the queue")
     async def see_current_queue(self, interaction: discord.Interaction):
         await self.announcement_channel.send(embed=see_queue_embed(self.queue))
+
+    async def add_album_to_queue(self, interaction, voice_client, album_info, album_songs):
+        for i, song in enumerate(album_songs):
+            not_last_song = (i != len(album_songs) - 1)
+            await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
+        await interaction.followup.send(embed=added_album_to_queue_embed(album_info))
+
+    async def add_playlist_to_queue(self, interaction, voice_client, playlist_info, playlist_songs):
+        for i, song in enumerate(playlist_songs):
+            not_last_song = (i != len(playlist_songs) - 1)
+            await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
+        await interaction.followup.send(embed=added_playlist_to_queue_embed(playlist_info))
 
     async def add_to_queue(self, song_info, interaction, voice_client, part_of_playlist, last_song, is_decoded_link):
 

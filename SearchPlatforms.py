@@ -77,9 +77,8 @@ class SearchPlatforms:
         playlist_links = await self.search_youtube_video(link, self.ytdl_playlist_options)
         return playlist_links
 
-    async def search_youtube_music(self, song_name, search_filter):
-        results = self.yt_music.search(song_name, filter=search_filter, limit=1)
-
+    async def search_youtube_music_song(self, song_name):
+        results = self.yt_music.search(song_name, filter='songs', limit=1)
         if not results:
             song_name += " (Audio)"
             song = await self.search_youtube_with_query(song_name)
@@ -93,10 +92,9 @@ class SearchPlatforms:
             "thumbnail": song_info['thumbnails'][-1]['url'],
             "artist": song_info['artists'][0]['name'],
         }
-
         return song
 
-    async def search_youtube_music_for_album(self, album_query):
+    async def search_youtube_music_album(self, album_query):
         album_songs = []
         yt_album = self.yt_music.search(album_query, filter='albums', limit=1)
 
@@ -118,8 +116,29 @@ class SearchPlatforms:
             album_songs.append(song_info)
         return album_details, album_songs
 
-    async def search_spotify_song(self, link):
+    async def search_youtube_music_playlist(self, query):
+        playlist_songs = []
+        yt_playlist = self.yt_music.search(query, filter='playlists', limit=1)
 
+        playlist_song_info = self.yt_music.get_playlist(yt_playlist[0]['browseId'])
+        playlist_details = {
+            "title": playlist_song_info["title"],
+            "author": playlist_song_info['author'][0]['name'],
+            "thumbnail": playlist_song_info['thumbnails'][-1]['url'],
+            "track_count": playlist_song_info['trackCount'],
+        }
+        for song in playlist_song_info['tracks']:
+            song_info = {
+                "url": 'https://youtube.com/watch?v=' + song['videoId'],
+                "title": song['title'],
+                "duration": song['duration_seconds'],
+                "thumbnail": playlist_details['thumbnail'],
+                "artist": song['artists'][0]['name'],
+            }
+            playlist_songs.append(song_info)
+        return playlist_details, playlist_songs
+
+    async def search_spotify_song(self, link):
         # # Capture anything after track, and before the next symbol, which should be the end of the ID.
         if re.search('spotify.link', link):
             web_response = requests.head(link, allow_redirects=True, timeout=5)
@@ -135,7 +154,7 @@ class SearchPlatforms:
         song = self.sp.track(song_id)
         song_name = f"{song['name']} - {song['artists'][0]['name']}"
 
-        song = await self.search_youtube_music(song_name, 'songs')
+        song = await self.search_youtube_music_song(song_name)
         return song
 
     async def search_spotify_playlist(self, link):
@@ -198,7 +217,7 @@ class SearchPlatforms:
                 album_songs.append(videos[0])
             return album_songs
 
-        return await self.search_youtube_music_for_album(album_query)
+        return await self.search_youtube_music_album(album_query)
 
     async def search_apple_song(self, link):
         id_search = re.search(r'i=([a-zA-Z0-9]+)', link)
@@ -212,7 +231,7 @@ class SearchPlatforms:
 
         song_name = f"{song_info['trackName']} - {song_info['artistName']}"
 
-        song = await self.search_youtube_music(song_name, 'songs')
+        song = await self.search_youtube_music_song(song_name)
         return song
 
     async def search_apple_album(self, link):
@@ -227,4 +246,4 @@ class SearchPlatforms:
 
         album_query = f"{itunes_info['collectionName']} - {itunes_info['artistName']}"
 
-        return await self.search_youtube_music_for_album(album_query)
+        return await self.search_youtube_music_album(album_query)
