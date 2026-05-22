@@ -4,13 +4,24 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import re
 import requests
+from yt_dlp.utils import DownloadError, ExtractorError
 from ytmusicapi import YTMusic
 
 # This actually looks through YouTube for the video/playlist.
 def extract(query, ytdl_options):
-    with yt_dlp.YoutubeDL(ytdl_options) as ytdl:
-        result = ytdl.extract_info(query, download=False)
-    return result
+    try:
+        with yt_dlp.YoutubeDL(ytdl_options) as ytdl:
+            result = ytdl.extract_info(query, download=False)
+        return result
+    except DownloadError as e:
+        print(f"Error while downloading {query}: {e}")
+        return str(e)
+    except ExtractorError as e:
+        print(f"Error while extracting {query}: {e}")
+        return str(e)
+    except Exception as e:
+        print(f"Error: {e}")
+        return str(e)
 
 def search_itunes_for_info(song_id):
     # Instead of paying £80 a year for Apple developer access, they keep this simple lookup page free to use to
