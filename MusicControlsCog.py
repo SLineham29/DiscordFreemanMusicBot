@@ -239,6 +239,11 @@ class MusicCommands(commands.Cog):
             return
         voice_client.stop()
 
+    @app_commands.command(name="clear", description="Clear the current queue")
+    async def clear(self, interaction: discord.Interaction):
+        self.queue.clear()
+        await interaction.response.send_message("Queue has been cleared.", ephemeral=True)
+
     @app_commands.command(name="stop", description="Stop the current song and clear the queue")
     async def stop(self, interaction: discord.Interaction):
         voice_client = await(check_if_in_server(interaction))
