@@ -1,3 +1,4 @@
+import discord
 import yt_dlp
 import asyncio
 import spotipy
@@ -6,6 +7,7 @@ import re
 import requests
 from yt_dlp.utils import DownloadError, ExtractorError
 from ytmusicapi import YTMusic
+from urllib.parse import unquote
 
 # This actually looks through YouTube for the video/playlist.
 def extract(query, ytdl_options):
@@ -267,3 +269,16 @@ class SearchPlatforms:
         album_query = f"{itunes_info['collectionName']} - {itunes_info['artistName']}"
 
         return await self.search_youtube_music_album(album_query)
+
+    async def search_audio_page(self, link):
+        # Cleaning up the URL to get the filename.
+        clean_url = link.split('?')[0]
+        parsed_title = clean_url.split('/')[-1]
+        cleaned_title = unquote(parsed_title)
+
+        song = {
+            "url": link,
+            "title": cleaned_title,
+            "artist": "Unknown (Audio File)"
+        }
+        return song

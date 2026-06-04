@@ -36,6 +36,11 @@ def get_link_type(link):
         else:
             return "apple_album"
 
+    # Songs uploaded to Discord / Pages containing an audio file
+    for filetype in valid_filetypes:
+        if filetype in link:
+            return "audio_page"
+
     return link_type
 
 async def check_if_in_server(interaction):
@@ -74,8 +79,13 @@ def now_playing_embed(song):
     embed.add_field(name="By", value=song.get("artist", "Unknown"), inline=False)
     embed.add_field(name="Added By", value=f"<@{song['user_id']}>")
     embed.add_field(name="Length", value=datetime.timedelta(seconds=song.get("duration") or 0))
-    embed.set_thumbnail(url=song.get("thumbnail"))
-    return embed
+    thumbnail = None
+    if song.get("artist") == "Unknown (Audio File)":
+        thumbnail = discord.File("images/Local File Thumbnail.png", filename="thumbnail.png")
+        embed.set_thumbnail(url="attachment://thumbnail.png")
+    else:
+        embed.set_thumbnail(url=song.get("thumbnail"))
+    return embed, thumbnail
 
 def added_to_queue_embed(song):
     embed = discord.Embed(
@@ -129,6 +139,8 @@ def see_queue_embed(queue):
         queue_runtime += song.get('duration')
     embed.add_field(name="Total Runtime", value=datetime.timedelta(seconds=queue_runtime))
     return embed
+
+valid_filetypes = (".mp3", ".mp4", ".ogg", ".flac", ".m4a", ".opus", ".wav", ".wma")
 
 # In the Discord.py library a collection of commands are called 'Cogs',
 # which means that this class is a 'Cog' containing all the music commands.
@@ -189,6 +201,8 @@ class MusicCommands(commands.Cog):
                 album_info, album_songs = await self.searcher.search_apple_album(link)
                 await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
                 return
+            case "audio_page":
+                song_info = await self.searcher.search_audio_page(link)
             case _:
                 await interaction.followup.send("Invalid link type.")
                 return
@@ -344,9 +358,11 @@ class MusicCommands(commands.Cog):
         # The top source is if I have the FFMPEG exe stored in Windows,
         # and the other is if it's installed globally in my Raspberry Pi.
         if platform.system() == "Windows":
-            source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_options)
+            # source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_options)
+            source = discord.FFmpegPCMAudio(song['url'], **ffmpeg_options)
         else:
-            source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_options, executable="ffmpeg")
+            # source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_options, executable="ffmpeg")
+            source = discord.FFmpegPCMAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
 
         # After the song finishes, loop through this method again to get to the next song.
         def after_song(error):
@@ -358,9 +374,12 @@ class MusicCommands(commands.Cog):
         await voice_channel.edit(status=f"Playing: {song.get('title')}")
 
         if self.announcement_channel:
-            embed = now_playing_embed(song)
+            embed, thumbnail = now_playing_embed(song)
             buttons = MusicControlButtons(self, interaction.guild)
-            await self.announcement_channel.send(embed=embed, view=buttons)
+            if thumbnail:
+                await self.announcement_channel.send(embed=embed, view=buttons, file=thumbnail)
+            else:
+                await self.announcement_channel.send(embed=embed, view=buttons)
 
 class MusicControlButtons(discord.ui.View):
     def __init__(self, cog, guild):
