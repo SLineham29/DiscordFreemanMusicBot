@@ -56,6 +56,14 @@ async def check_if_in_server(interaction):
         await voice_client.move_to(voice_channel)
     return voice_client
 
+def get_error_type(error):
+    if "Sign in to confirm your age" in error:
+        return "Video is age-restricted, skipping..."
+    elif "unavailable" in error:
+        return "Video unavailable, skipping..."
+    else:
+        return "Error while getting video, skipping..."
+
 def now_playing_embed(song):
 
     embed = discord.Embed(
@@ -188,6 +196,9 @@ class MusicCommands(commands.Cog):
         if song_info is None:
             await interaction.followup.send("Could not find a valid song within this link.")
             return
+        elif isinstance(song_info, str):
+            await interaction.followup.send(get_error_type(song_info))
+            return
 
         await interaction.followup.send(embed=added_to_queue_embed(song_info))
         await self.add_to_queue(song_info, interaction, voice_client, False, False, link_is_decoded)
@@ -319,6 +330,10 @@ class MusicCommands(commands.Cog):
         # could be called multiple times at once, which might result in an IP timeout.
         if not song['decodedLink']:
             audio_url = await self.searcher.search_youtube_video(song["url"])
+            if isinstance(audio_url, str):
+                await self.announcement_channel.send(get_error_type(audio_url), delete_after=10)
+                await self.next_song(interaction)
+                return
             song["url"] = audio_url.get("url")
 
         ffmpeg_options = {
