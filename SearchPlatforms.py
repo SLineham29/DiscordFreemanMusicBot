@@ -1,4 +1,3 @@
-import discord
 import yt_dlp
 import asyncio
 import spotipy
@@ -270,7 +269,7 @@ class SearchPlatforms:
 
         return await self.search_youtube_music_album(album_query)
 
-    async def search_audio_page(self, link):
+    def search_audio_page(self, link):
         # Cleaning up the URL to get the filename.
         clean_url = link.split('?')[0]
         parsed_title = clean_url.split('/')[-1]
@@ -279,6 +278,6 @@ class SearchPlatforms:
         song = {
             "url": link,
             "title": cleaned_title,
-            "artist": "Unknown (Audio File)"
+            "artist": "(Local / Hosted File)"
         }
         return song
