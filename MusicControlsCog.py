@@ -317,9 +317,37 @@ class MusicCommands(commands.Cog):
 
         self.queue.append(song)
 
+        # If this incoming song will be the next one played, decode it now to prevent a long wait time between songs.
+        if len(self.queue) == 1 and voice_client.is_playing():
+            print("Loading song in the background...")
+            asyncio.create_task(self.decode_song())
+
         if not last_song:
             if not voice_client.is_playing() and not voice_client.is_paused():
                 await self.next_song(interaction)
+
+    async def decode_song(self, song=None):
+        if song is not None:
+            next_song = song
+        else:
+            if len(self.queue) == 0:
+                return None
+            next_song = self.queue[0]
+
+        if next_song['decodedLink']:
+            return None
+
+        audio_url = await self.searcher.search_youtube_video(next_song["url"])
+        if isinstance(audio_url, str):
+            await self.announcement_channel.send(get_error_type(audio_url), delete_after=10)
+            return None
+        next_song["url"] = audio_url.get("url")
+        next_song['decodedLink'] = True
+
+        if song is not None:
+            return next_song
+        else:
+            return None
 
     async def next_song(self, interaction: discord.Interaction):
 
@@ -342,12 +370,7 @@ class MusicCommands(commands.Cog):
         # before playback. This needs to be done here rather than on queue addition because otherwise the YouTube servers
         # could be called multiple times at once, which might result in an IP timeout.
         if not song['decodedLink']:
-            audio_url = await self.searcher.search_youtube_video(song["url"])
-            if isinstance(audio_url, str):
-                await self.announcement_channel.send(get_error_type(audio_url), delete_after=10)
-                await self.next_song(interaction)
-                return
-            song["url"] = audio_url.get("url")
+            song = await self.decode_song(song)
 
         ffmpeg_options = {
             'before_options': "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
@@ -375,6 +398,9 @@ class MusicCommands(commands.Cog):
 
         voice_client.play(source, after=after_song)
         await voice_channel.edit(status=f"Playing: {song.get('title')}")
+
+        # Decode the next song in the queue to prevent a long waiting period between songs.
+        asyncio.create_task(self.decode_song())
 
         if self.announcement_channel:
             embed, thumbnail = now_playing_embed(song)
