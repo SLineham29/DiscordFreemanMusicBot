@@ -11,6 +11,10 @@ class QueueCreator(discord.ui.View):
         self.current_page = 0
         self.queue_runtime = 0
 
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+
     def create_queue_embed(self):
         embed = discord.Embed(
             colour=discord.Colour.blue()

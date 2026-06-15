@@ -386,17 +386,21 @@ class MusicCommands(commands.Cog):
 
         if self.announcement_channel:
             embed, thumbnail = now_playing_embed(song)
-            buttons = MusicControlButtons(self, interaction.guild)
+            buttons = MusicControlButtons(self, interaction.guild, song.get('duration'))
             if thumbnail:
                 await self.announcement_channel.send(embed=embed, view=buttons, file=thumbnail)
             else:
                 await self.announcement_channel.send(embed=embed, view=buttons)
 
 class MusicControlButtons(discord.ui.View):
-    def __init__(self, cog, guild):
-        super().__init__()
+    def __init__(self, cog, guild, timeout_length):
+        super().__init__(timeout=timeout_length)
         self.cog = cog
         self.guild = guild
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
 
     @discord.ui.button(label="Play/Pause", style=discord.ButtonStyle.green, emoji="⏯️")
     async def play_pause_button(self, interaction: discord.Interaction, button: discord.ui.Button):
