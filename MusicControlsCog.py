@@ -8,6 +8,7 @@ from discord.ext import commands
 from discord import app_commands
 import asyncio
 from SearchPlatforms import SearchPlatforms
+from QueueCreator import QueueCreator
 
 def get_link_type(link):
     link_type = "query"
@@ -112,31 +113,6 @@ def added_playlist_to_queue_embed(playlist):
     )
     embed.add_field(name="Song Count", value=f"{playlist.get('track_count')}")
     embed.set_thumbnail(url=playlist.get("thumbnail"))
-    return embed
-
-def see_queue_embed(queue):
-    if len(queue) == 0:
-        embed = discord.Embed(
-            title="There is currently nothing in the queue.",
-            colour=discord.Colour.brand_red()
-        )
-        return embed
-    elif len(queue) == 1:
-        embed = discord.Embed(
-            title="There is currently 1 song in the queue:",
-            colour=discord.Colour.blue()
-        )
-    else:
-        embed = discord.Embed(
-            title=f"There are currently {len(queue)} songs in the queue:",
-            colour=discord.Colour.blue()
-        )
-
-    queue_runtime = 0
-    for position, song in enumerate(queue):
-        embed.add_field(name=f"{position + 1})", value=f"{song.get('title')} - {song.get('artist')}", inline=False)
-        queue_runtime += song.get('duration')
-    embed.add_field(name="Total Runtime", value=datetime.timedelta(seconds=queue_runtime))
     return embed
 
 valid_filetypes = (".mp3", ".mp4", ".ogg", ".flac", ".m4a", ".opus", ".wav", ".wma")
@@ -288,7 +264,13 @@ class MusicCommands(commands.Cog):
 
     @app_commands.command(name="queue", description="See what's currently in the queue")
     async def see_current_queue(self, interaction: discord.Interaction):
-        await self.announcement_channel.send(embed=see_queue_embed(self.queue))
+        if not self.queue:
+            await interaction.response.send_message("Queue is currently empty", ephemeral=True)
+            return
+
+        queue_creator = QueueCreator(given_queue=self.queue)
+        queue_embed = queue_creator.create_queue_embed()
+        await interaction.response.send_message(embed=queue_embed, view=queue_creator)
 
     async def add_album_to_queue(self, interaction, voice_client, album_info, album_songs):
         for i, song in enumerate(album_songs):
@@ -433,7 +415,6 @@ class MusicControlButtons(discord.ui.View):
 
     @discord.ui.button(label="See Queue", style=discord.ButtonStyle.gray, emoji="📃")
     async def see_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
         await self.cog.see_current_queue.callback(self.cog, interaction)
 
 async def setup(bot):
