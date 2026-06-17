@@ -140,11 +140,15 @@ class MusicCommands(commands.Cog):
         link_type = get_link_type(link)
         link_is_decoded = True
 
-        random_chance = random.randint(1, 75)
+        random_chance = random.randint(1, 100)
         if random_chance == 50:
             link = "https://youtu.be/yU6gG-p5FZc?si=u58gj53pC3m5h3vq"
             link_type = "youtube_video"
             await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Skin by Rag'n'Bone Man!")
+        elif random_chance == 60:
+            link = "https://open.spotify.com/track/2u9VGZmVz7Rm01SfDgzcfA?si=0009c1700a744058"
+            link_type = "spotify_song"
+            await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Liebestraum No. 3 in A-Flat Major, S.541/3 by Frank Liszt!")
 
         match link_type:
             case "query":
