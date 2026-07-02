@@ -125,6 +125,7 @@ class MusicCommands(commands.Cog):
         self.queue = []
         self.announcement_channel = None
         self.searcher = SearchPlatforms(os.getenv("SPOTIPY_CLIENT_ID"), os.getenv("SPOTIPY_CLIENT_SECRET"))
+        self.play_locker = asyncio.Lock()
 
     @app_commands.command(name="play", description="Play a YouTube / Spotify / Apple Music song, video, or playlist")
     @app_commands.describe(link="A YouTube / Spotify / Apple Music link, or YouTube search query")
@@ -336,65 +337,68 @@ class MusicCommands(commands.Cog):
             return None
 
     async def next_song(self, interaction: discord.Interaction):
+        async with self.play_locker:
+            voice_client = interaction.guild.voice_client
+            voice_channel = interaction.user.voice.channel
 
-        voice_client = interaction.guild.voice_client
-        voice_channel = interaction.user.voice.channel
+            if not voice_client:
+                return
 
-        if not voice_client:
-            return
+            if voice_client.is_playing() or voice_client.is_paused():
+                return
 
-        if len(self.queue) == 0:
+            if len(self.queue) == 0:
+                if self.announcement_channel:
+                    await self.announcement_channel.send("All songs have now been played. Leaving call.", delete_after=10)
+                await voice_channel.edit(status="")
+                await voice_client.disconnect()
+                return
+
+            song = self.queue.pop(0)
+
+            # If the song is from a playlist or a non-Youtube link, it doesn't have the correct URL attached to it, so we need to convert it
+            # before playback. This needs to be done here rather than on queue addition because otherwise the YouTube servers
+            # could be called multiple times at once, which might result in an IP timeout.
+            if not song['decodedLink']:
+                song = await self.decode_song(song)
+
+            ffmpeg_options = {
+                'before_options': "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+                'options': '-vn'
+            }
+
+            # The top source is if I have the FFMPEG exe stored in Windows,
+            # and the other is if it's installed globally in my Raspberry Pi.
+            if platform.system() == "Windows":
+                if song.get("artist") == "(Local / Hosted File)":
+                    source = discord.FFmpegPCMAudio(song['url'], **ffmpeg_options)
+                else:
+                    source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_options)
+            else:
+                if song.get("artist") == "(Local / Hosted File)":
+                    source = discord.FFmpegPCMAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
+                else:
+                    source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_options, executable="ffmpeg")
+
+            # After the song finishes, loop through this method again to get to the next song.
+            def after_song(error):
+                if error:
+                    print(f"Error while playing:{error}")
+                asyncio.run_coroutine_threadsafe(self.next_song(interaction), self.bot.loop)
+
+            voice_client.play(source, after=after_song)
+            await voice_channel.edit(status=f"Playing: {song.get('title')}")
+
+            # Decode the next song in the queue to prevent a long waiting period between songs.
+            asyncio.create_task(self.decode_song())
+
             if self.announcement_channel:
-                await self.announcement_channel.send("All songs have now been played. Leaving call.", delete_after=10)
-            await voice_channel.edit(status="")
-            await voice_client.disconnect()
-            return
-
-        song = self.queue.pop(0)
-
-        # If the song is from a playlist or a non-Youtube link, it doesn't have the correct URL attached to it, so we need to convert it
-        # before playback. This needs to be done here rather than on queue addition because otherwise the YouTube servers
-        # could be called multiple times at once, which might result in an IP timeout.
-        if not song['decodedLink']:
-            song = await self.decode_song(song)
-
-        ffmpeg_options = {
-            'before_options': "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            'options': '-vn'
-        }
-
-        # The top source is if I have the FFMPEG exe stored in Windows,
-        # and the other is if it's installed globally in my Raspberry Pi.
-        if platform.system() == "Windows":
-            if song.get("artist") == "(Local / Hosted File)":
-                source = discord.FFmpegPCMAudio(song['url'], **ffmpeg_options)
-            else:
-                source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_options)
-        else:
-            if song.get("artist") == "(Local / Hosted File)":
-                source = discord.FFmpegPCMAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
-            else:
-                source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_options, executable="ffmpeg")
-
-        # After the song finishes, loop through this method again to get to the next song.
-        def after_song(error):
-            if error:
-                print(f"Error while playing:{error}")
-            asyncio.run_coroutine_threadsafe(self.next_song(interaction), self.bot.loop)
-
-        voice_client.play(source, after=after_song)
-        await voice_channel.edit(status=f"Playing: {song.get('title')}")
-
-        # Decode the next song in the queue to prevent a long waiting period between songs.
-        asyncio.create_task(self.decode_song())
-
-        if self.announcement_channel:
-            embed, thumbnail = now_playing_embed(song)
-            buttons = MusicControlButtons(self, interaction.guild, song.get('duration'))
-            if thumbnail:
-                await self.announcement_channel.send(embed=embed, view=buttons, file=thumbnail)
-            else:
-                await self.announcement_channel.send(embed=embed, view=buttons)
+                embed, thumbnail = now_playing_embed(song)
+                buttons = MusicControlButtons(self, interaction.guild, song.get('duration'))
+                if thumbnail:
+                    await self.announcement_channel.send(embed=embed, view=buttons, file=thumbnail)
+                else:
+                    await self.announcement_channel.send(embed=embed, view=buttons)
 
 class MusicControlButtons(discord.ui.View):
     def __init__(self, cog, guild, timeout_length):
