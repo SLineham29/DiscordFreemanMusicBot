@@ -16,7 +16,13 @@ def get_link_type(link):
 
     # YouTube links
     if "youtu" in link:
-        if "list=" in link:
+        if "music.youtube" in link:
+            if "olak5uy_" in link:
+                return "yt_music_album"
+            if "list=rd" in link or "list=pl" in link:
+                return "yt_music_playlist"
+            return "yt_music_song"
+        elif "list=" in link:
             return "youtube_playlist"
         return "youtube_video"
 
@@ -160,11 +166,23 @@ class MusicCommands(commands.Cog):
                 playlist_info, playlist_songs = await self.searcher.search_youtube_playlist(link)
                 await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs)
                 return
+            case "yt_music_song":
+                song_info = await self.searcher.search_youtube_music_song(song_link=link)
+                link_is_decoded = False
+            case "yt_music_playlist":
+                playlist_info, playlist_songs = await self.searcher.search_youtube_music_playlist(playlist_link=link)
+                await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs)
+                return
+            case "yt_music_album":
+                album_info, album_songs = await self.searcher.search_youtube_music_album(album_link=link)
+                await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
+                return
             case "spotify_song":
                 song_info = await self.searcher.search_spotify_song(link)
                 link_is_decoded = False
             case "spotify_playlist":
-                album_info, playlist_songs = await self.searcher.search_spotify_playlist(link)
+                # Since Spotify closed the API for non-premium members, I can't check if this works and fix it.
+                playlist_info, playlist_songs = await self.searcher.search_spotify_playlist(link)
                 for i, song in enumerate(playlist_songs):
                     not_last_song = (i != len(playlist_songs) - 1)
                     await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
@@ -209,14 +227,14 @@ class MusicCommands(commands.Cog):
 
         match search_filter:
             case "Song":
-                song_info = await self.searcher.search_youtube_music_song(query)
+                song_info = await self.searcher.search_youtube_music_song(song_query=query)
                 await interaction.followup.send(embed=added_to_queue_embed(song_info))
                 await self.add_to_queue(song_info, interaction, voice_client, False, False, False)
             case "Album":
-                album_info, album_songs = await self.searcher.search_youtube_music_album(query)
+                album_info, album_songs = await self.searcher.search_youtube_music_album(album_query=query)
                 await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
             case "Playlist":
-                playlist_info, playlist_songs = await self.searcher.search_youtube_music_playlist(query)
+                playlist_info, playlist_songs = await self.searcher.search_youtube_music_playlist(playlist_query=query)
                 await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs)
 
     @app_commands.command(name="pause", description="Pause the song")
@@ -300,7 +318,7 @@ class MusicCommands(commands.Cog):
 
         # If YouTube didn't get the artist name, just use the name of the uploader channel instead.
         if 'artist' not in song:
-            song['artist'] = song_info['channel']
+            song['artist'] = song_info.get('channel', 'Unknown Artist/Channel')
 
         self.queue.append(song)
 
