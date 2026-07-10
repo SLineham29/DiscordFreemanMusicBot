@@ -132,6 +132,7 @@ class MusicCommands(commands.Cog):
         self.announcement_channel = None
         self.searcher = SearchPlatforms(os.getenv("SPOTIPY_CLIENT_ID"), os.getenv("SPOTIPY_CLIENT_SECRET"))
         self.play_locker = asyncio.Lock()
+        self.current_song_name = ""
 
     @app_commands.command(name="play", description="Play a YouTube / Spotify / Apple Music song, video, or playlist")
     @app_commands.describe(link="A YouTube / Spotify / Apple Music link, or YouTube search query")
@@ -148,14 +149,27 @@ class MusicCommands(commands.Cog):
         link_is_decoded = True
 
         random_chance = random.randint(1, 100)
-        if random_chance == 50:
-            link = "https://youtu.be/yU6gG-p5FZc?si=u58gj53pC3m5h3vq"
-            link_type = "youtube_video"
-            await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Skin by Rag'n'Bone Man!")
-        elif random_chance == 60:
-            link = "https://open.spotify.com/track/2u9VGZmVz7Rm01SfDgzcfA?si=0009c1700a744058"
-            link_type = "spotify_song"
-            await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Liebestraum No. 3 in A-Flat Major, S.541/3 by Frank Liszt!")
+        match random_chance:
+            case 10:
+                link = "https://open.spotify.com/track/6y2Kaz9QI01XBKJ8mTb7Pf?si=27889bd54e3a4bae"
+                link_type = "spotify_song"
+                await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Skin by Rag'n'Bone Man!")
+            case 20:
+                link = "https://open.spotify.com/track/2u9VGZmVz7Rm01SfDgzcfA?si=0009c1700a744058"
+                link_type = "spotify_song"
+                await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Liebestraum No. 3 in A-Flat Major, S.541/3 by Frank Liszt!")
+            case 30:
+                link = "https://youtu.be/CjGbXCssC7Q?si=lm-PUT0hENgmjO72"
+                link_type = "youtube_video"
+                await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Hello Zepp + Overture from the Saw soundtrack!")
+            case 40:
+                link = "https://open.spotify.com/track/4AewKenHXKBt643p473xCk?si=0ca3da3700d3441e"
+                link_type = "spotify_song"
+                await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into American Money by BØRNS!")
+            case 50:
+                link = "https://open.spotify.com/track/2dMYPr7PTeiA3fyE3tc4ZT?si=f064104073fa46c4"
+                link_type = "spotify_song"
+                await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Seven Rings In Hand from Sonic and the Secret Rings!")
 
         match link_type:
             case "query":
@@ -255,7 +269,7 @@ class MusicCommands(commands.Cog):
 
     @app_commands.command(name="skip", description="Skip the current song and go to the next one in the queue")
     async def skip(self, interaction: discord.Interaction):
-        await interaction.response.send_message("Skipping...", ephemeral=True)
+        await interaction.response.send_message(f"<@{interaction.user.id}> has skipped " + self.current_song_name)
         voice_client = await(check_if_in_server(interaction))
         if voice_client is None:
             await interaction.followup.send("The bot is not in a call.", ephemeral=True)
@@ -405,6 +419,7 @@ class MusicCommands(commands.Cog):
                 asyncio.run_coroutine_threadsafe(self.next_song(interaction), self.bot.loop)
 
             voice_client.play(source, after=after_song)
+            self.current_song_name = song.get('title')
             await voice_channel.edit(status=f"Playing: {song.get('title')}")
 
             # Decode the next song in the queue to prevent a long waiting period between songs.
