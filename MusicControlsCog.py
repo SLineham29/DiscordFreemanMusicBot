@@ -3,6 +3,7 @@ import platform
 import random
 import datetime
 from typing import Literal
+import aiohttp
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -74,7 +75,7 @@ def get_error_type(error):
     elif "unavailable" in error:
         return "Video unavailable, skipping..."
     else:
-        return "Error while getting video, skipping..."
+        return "Error while getting song/video, skipping..."
 
 def now_playing_embed(song):
     embed = discord.Embed(
@@ -170,6 +171,14 @@ class MusicCommands(commands.Cog):
                 link = "https://open.spotify.com/track/2dMYPr7PTeiA3fyE3tc4ZT?si=f064104073fa46c4"
                 link_type = "spotify_song"
                 await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Seven Rings In Hand from Sonic and the Secret Rings!")
+            case 60:
+                link = "https://open.spotify.com/track/0kVOor973ijVqOBhYqvaE8?si=ffc6676738174b7d"
+                link_type = "spotify_song"
+                await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Me Olvidé de Vivir from Julio Iglesias!")
+            case 70:
+                link = "https://open.spotify.com/track/6ZbPvkhBh5QzfZiOStvqS4?si=WODQy_txQw2lm-_eXMKUMw"
+                link_type = "spotify_song"
+                await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Dirty Words - VIP Remix from The Qemists and Enter Shikari!")
 
         match link_type:
             case "query":
@@ -183,6 +192,7 @@ class MusicCommands(commands.Cog):
             case "yt_music_song":
                 song_info = await self.searcher.search_youtube_music_song(song_link=link)
                 link_is_decoded = False
+                link = song_info["url"]
             case "yt_music_playlist":
                 playlist_info, playlist_songs = await self.searcher.search_youtube_music_playlist(playlist_link=link)
                 await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs)
@@ -194,12 +204,13 @@ class MusicCommands(commands.Cog):
             case "spotify_song":
                 song_info = await self.searcher.search_spotify_song(link)
                 link_is_decoded = False
+                link = song_info["url"]
             case "spotify_playlist":
                 # Since Spotify closed the API for non-premium members, I can't check if this works and fix it.
                 playlist_info, playlist_songs = await self.searcher.search_spotify_playlist(link)
                 for i, song in enumerate(playlist_songs):
                     not_last_song = (i != len(playlist_songs) - 1)
-                    await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
+                    await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False, song["url"])
                 await interaction.followup.send(f"Added {len(playlist_songs)} songs from a Spotify playlist to the queue")
                 return
             case "spotify_album":
@@ -209,6 +220,7 @@ class MusicCommands(commands.Cog):
             case "apple_song":
                 song_info = await self.searcher.search_apple_song(link)
                 link_is_decoded = False
+                link = song_info["url"]
             case "apple_album":
                 album_info, album_songs = await self.searcher.search_apple_album(link)
                 await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
@@ -227,7 +239,7 @@ class MusicCommands(commands.Cog):
             return
 
         await interaction.followup.send(embed=added_to_queue_embed(song_info))
-        await self.add_to_queue(song_info, interaction, voice_client, False, False, link_is_decoded)
+        await self.add_to_queue(song_info, interaction, voice_client, False, False, link_is_decoded, link)
 
     @app_commands.command(name="search", description="Search for a song, album, or playlist on YTMusic")
     @app_commands.describe(query="A YTMusic search query")
@@ -243,7 +255,7 @@ class MusicCommands(commands.Cog):
             case "Song":
                 song_info = await self.searcher.search_youtube_music_song(song_query=query)
                 await interaction.followup.send(embed=added_to_queue_embed(song_info))
-                await self.add_to_queue(song_info, interaction, voice_client, False, False, False)
+                await self.add_to_queue(song_info, interaction, voice_client, False, False, False, song_info["url"])
             case "Album":
                 album_info, album_songs = await self.searcher.search_youtube_music_album(album_query=query)
                 await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
@@ -312,22 +324,23 @@ class MusicCommands(commands.Cog):
     async def add_album_to_queue(self, interaction, voice_client, album_info, album_songs):
         for i, song in enumerate(album_songs):
             not_last_song = (i != len(album_songs) - 1)
-            await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
+            await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False, song["url"])
         await interaction.followup.send(embed=added_album_to_queue_embed(album_info))
 
     async def add_playlist_to_queue(self, interaction, voice_client, playlist_info, playlist_songs):
         for i, song in enumerate(playlist_songs):
             not_last_song = (i != len(playlist_songs) - 1)
-            await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False)
+            await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False, song["url"])
         await interaction.followup.send(embed=added_playlist_to_queue_embed(playlist_info))
 
-    async def add_to_queue(self, song_info, interaction, voice_client, part_of_playlist, last_song, is_decoded_link):
+    async def add_to_queue(self, song_info, interaction, voice_client, part_of_playlist, last_song, is_decoded_link, original_link):
 
         song = {
             **song_info,
             "user_id": interaction.user.id,
             "playlistSong": part_of_playlist,
-            "decodedLink": is_decoded_link
+            "decodedLink": is_decoded_link,
+            "originalLink": original_link
         }
 
         # If YouTube didn't get the artist name, just use the name of the uploader channel instead.
@@ -356,7 +369,7 @@ class MusicCommands(commands.Cog):
         if next_song['decodedLink']:
             return None
 
-        audio_url = await self.searcher.search_youtube_video(next_song["url"])
+        audio_url = await self.searcher.search_youtube_video(next_song["originalLink"])
         if isinstance(audio_url, str):
             await self.announcement_channel.send(get_error_type(audio_url), delete_after=10)
             return None
@@ -367,6 +380,18 @@ class MusicCommands(commands.Cog):
             return next_song
         else:
             return None
+
+    async def check_decoded_link_validity(self, link):
+        is_valid = False
+        try:
+            print("Checking Link Validity...")
+            async with aiohttp.ClientSession() as session:
+                async with session.head(link, timeout=5) as response:
+                    if response.status == 200:
+                        is_valid = True
+        except Exception as e:
+            print(f"URL check failed: {e}")
+        return is_valid
 
     async def next_song(self, interaction: discord.Interaction):
         async with self.play_locker:
@@ -392,6 +417,12 @@ class MusicCommands(commands.Cog):
             # before playback. This needs to be done here rather than on queue addition because otherwise the YouTube servers
             # could be called multiple times at once, which might result in an IP timeout.
             if not song['decodedLink']:
+                song = await self.decode_song(song)
+
+            if not await self.check_decoded_link_validity(song['url']):
+                await self.announcement_channel.send("Next song has an invalid link, retrying...", delete_after=30)
+                print("Song has an invalid link, retrying...")
+                song['decodedLink'] = False
                 song = await self.decode_song(song)
 
             ffmpeg_options = {

@@ -1,7 +1,7 @@
 import yt_dlp
 import asyncio
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 import re
 import requests
 from yt_dlp.utils import DownloadError, ExtractorError
@@ -43,6 +43,14 @@ def search_itunes_for_info(song_id):
 
 class SearchPlatforms:
     def __init__(self, client_id, client_secret):
+
+        # auth_manager = SpotifyOAuth(client_id=client_id,
+        #                             client_secret=client_secret,
+        #                             redirect_uri="https://localhost:8080/api/callback",
+        #                             scope="playlist-read-private playlist-read-collaborative",
+        #                             open_browser=False)
+        # self.sp = spotipy.Spotify(auth_manager=auth_manager) # TODO - Change Spotify access to OAuth to allow for private playlist access.
+
         self.sp = spotipy.Spotify(client_credentials_manager=
                              SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))
 
@@ -55,9 +63,13 @@ class SearchPlatforms:
             "source_address": "0.0.0.0",
             "socket_timeout": 10,
             "retries": 3,
+            "fragment_retries": 3,
             "skip_unavailable_fragments": True,
             "extract_flat": False,
             "remote_components": ["ejs:github"],
+            "http_headers": {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            }
         }
 
         # Need to use 'extract_flat' here because otherwise, depending on the size of the playlist,
@@ -65,6 +77,7 @@ class SearchPlatforms:
         self.ytdl_playlist_options = {
             **self.ytdl_options,
             "extract_flat": True,
+            "noplaylist": False,
         }
 
         self.ytdl_yt_search_options = {
@@ -95,8 +108,6 @@ class SearchPlatforms:
         }
         playlist_songs = playlist_info.get("entries", [])
         for song in playlist_songs:
-            print("New Song... ")
-            print(song)
             song["thumbnail"] = song["thumbnails"][-1]["url"]
         return playlist_details, playlist_songs
 
@@ -108,7 +119,7 @@ class SearchPlatforms:
             song_info = self.yt_music.get_song(song_id)
             song = {
                 **song_info,
-                "url": 'https://youtube.com/watch?v=' + song_info['videoDetails']['videoId'],
+                "url": 'https://music.youtube.com/watch?v=' + song_info['videoDetails']['videoId'],
                 "title": song_info['videoDetails']['title'],
                 "duration": int(song_info['videoDetails']['lengthSeconds']),
                 "thumbnail": song_info['videoDetails']['thumbnail']['thumbnails'][-1]['url'],
@@ -123,7 +134,7 @@ class SearchPlatforms:
             song_info = results[0]
             song = {
                 **song_info,
-                "url": 'https://youtube.com/watch?v=' + song_info['videoId'],
+                "url": 'https://music.youtube.com/watch?v=' + song_info['videoId'],
                 "duration": song_info['duration_seconds'],
                 "thumbnail": song_info['thumbnails'][-1]['url'],
                 "artist": song_info['artists'][0]['name']
@@ -143,14 +154,21 @@ class SearchPlatforms:
             album_song_info = self.yt_music.get_album(yt_album[0]['browseId'])
 
         album_details = {
-            "title": album_song_info["title"],
+            "title": album_song_info['title'],
             "artist": album_song_info['artists'][0]['name'],
             "thumbnail": album_song_info['thumbnails'][-1]['url'],
             "track_count": album_song_info['trackCount'],
         }
         for song in album_song_info['tracks']:
+            if song.get('videoType') != 'MUSIC_VIDEO_TYPE_ATV':
+                print(song['title'] + " is a music video, fixing...")
+                search_query = f"{song['title']} - {album_details['artist']}"
+                song_search = self.yt_music.search(search_query, filter='songs', limit=1)
+                if song_search:
+                    song['videoId'] = song_search[0]['videoId']
+
             song_info = {
-                "url": 'https://youtube.com/watch?v=' + song['videoId'],
+                "url": 'https://music.youtube.com/watch?v=' + song['videoId'],
                 "title": song['title'],
                 "duration": song['duration_seconds'],
                 "thumbnail": album_details['thumbnail'],
@@ -178,7 +196,7 @@ class SearchPlatforms:
         }
         for song in playlist_song_info['tracks']:
             song_info = {
-                "url": 'https://youtube.com/watch?v=' + song['videoId'],
+                "url": 'https://music.youtube.com/watch?v=' + song['videoId'],
                 "title": song['title'],
                 "duration": song['duration_seconds'],
                 "thumbnail": song['thumbnails'][-1]['url'],
