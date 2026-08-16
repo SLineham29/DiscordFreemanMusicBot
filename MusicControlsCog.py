@@ -384,11 +384,12 @@ class MusicCommands(commands.Cog):
     async def check_decoded_link_validity(self, link):
         is_valid = False
         try:
-            print("Checking Link Validity...")
             async with aiohttp.ClientSession() as session:
                 async with session.head(link, timeout=5) as response:
-                    if response.status == 200:
+                    if response.status in(200, 206):
                         is_valid = True
+                    else:
+                        print(f"URL check failed: {response.status} for {link}")
         except Exception as e:
             print(f"URL check failed: {e}")
         return is_valid
@@ -419,14 +420,21 @@ class MusicCommands(commands.Cog):
             if not song['decodedLink']:
                 song = await self.decode_song(song)
 
-            if not await self.check_decoded_link_validity(song['url']):
-                await self.announcement_channel.send("Next song has an invalid link, retrying...", delete_after=30)
-                print("Song has an invalid link, retrying...")
-                song['decodedLink'] = False
-                song = await self.decode_song(song)
+            # Try and check for a valid link 3 times.
+            for attempt in range(3):
+                if not await self.check_decoded_link_validity(song['url']):
+                    await self.announcement_channel.send(f"Next song has an invalid link, retrying with attempt {attempt + 1}/3", delete_after=10)
+                    song['decodedLink'] = False
+                    song = await self.decode_song(song)
+                else:
+                    break
+            else:
+                await self.announcement_channel.send(f"Couldn't get a valid link, skipping {song['title']}", delete_after=30)
+                asyncio.run_coroutine_threadsafe(self.next_song(interaction), self.bot.loop)
+                return
 
             ffmpeg_options = {
-                'before_options': "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+                'before_options': "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -reconnect_on_network_error 1 -reconnect_on_http_error 4xx,5xx",
                 'options': '-vn'
             }
 
@@ -436,12 +444,12 @@ class MusicCommands(commands.Cog):
                 if song.get("artist") == "(Local / Hosted File)":
                     source = discord.FFmpegPCMAudio(song['url'], **ffmpeg_options)
                 else:
-                    source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_options)
+                    source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, codec='copy')
             else:
                 if song.get("artist") == "(Local / Hosted File)":
                     source = discord.FFmpegPCMAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
                 else:
-                    source = await discord.FFmpegOpusAudio.from_probe(song['url'], **ffmpeg_options, executable="ffmpeg")
+                    source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg", codec='copy')
 
             # After the song finishes, loop through this method again to get to the next song.
             def after_song(error):
@@ -449,6 +457,7 @@ class MusicCommands(commands.Cog):
                     print(f"Error while playing:{error}")
                 asyncio.run_coroutine_threadsafe(self.next_song(interaction), self.bot.loop)
 
+            print(f"Now Playing: {song.get('title')}")
             voice_client.play(source, after=after_song)
             self.current_song_name = song.get('title')
             await voice_channel.edit(status=f"Playing: {song.get('title')}")

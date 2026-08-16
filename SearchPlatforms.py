@@ -219,9 +219,14 @@ class SearchPlatforms:
             return
 
         song = self.sp.track(song_id)
-        song_name = f"{song['name']} - {song['artists'][0]['name']}"
+        isrc = song.get("external_ids", {}).get("isrc")
+        print(f"ISRC: {isrc}")
 
-        song = await self.search_youtube_music_song(song_query=song_name)
+        if isrc:
+            song = await self.search_youtube_music_song(song_query=isrc)
+        else:
+            song_name = f"{song['name']} - {song['artists'][0]['name']}"
+            song = await self.search_youtube_music_song(song_query=song_name)
         return song
 
     async def search_spotify_playlist(self, link):
@@ -266,7 +271,7 @@ class SearchPlatforms:
 
         album_id = album_id_search.group(1)
         album_info = self.sp.album(album_id)
-        album_query = f"{album_info['name']} - {album_info['artists'][0]['name']}"
+        album_query = f"{album_info['name']} - {album_info['artists'][0]['name']} ({album_info['release_date'][:4]})"
 
         yt_album = self.yt_music.search(album_query, filter='albums', limit=1)
         if not yt_album:
