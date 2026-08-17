@@ -44,15 +44,12 @@ def search_itunes_for_info(song_id):
 class SearchPlatforms:
     def __init__(self, client_id, client_secret):
 
-        # auth_manager = SpotifyOAuth(client_id=client_id,
-        #                             client_secret=client_secret,
-        #                             redirect_uri="https://localhost:8080/api/callback",
-        #                             scope="playlist-read-private playlist-read-collaborative",
-        #                             open_browser=False)
-        # self.sp = spotipy.Spotify(auth_manager=auth_manager) # TODO - Change Spotify access to OAuth to allow for private playlist access.
-
-        self.sp = spotipy.Spotify(client_credentials_manager=
-                             SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))
+        auth_manager = SpotifyOAuth(client_id=client_id,
+                                    client_secret=client_secret,
+                                    redirect_uri="https://127.0.0.1:8080/callback",
+                                    scope="playlist-read-private playlist-read-collaborative",
+                                    open_browser=False)
+        self.sp = spotipy.Spotify(auth_manager=auth_manager)
 
         self.yt_music = YTMusic()
 
@@ -218,15 +215,18 @@ class SearchPlatforms:
             print("Could not find a valid Spotify song ID in this link.")
             return
 
-        song = self.sp.track(song_id)
-        isrc = song.get("external_ids", {}).get("isrc")
+        spotify_song = self.sp.track(song_id)
+        isrc = spotify_song.get("external_ids", {}).get("isrc")
         print(f"ISRC: {isrc}")
 
         if isrc:
             song = await self.search_youtube_music_song(song_query=isrc)
-        else:
-            song_name = f"{song['name']} - {song['artists'][0]['name']}"
-            song = await self.search_youtube_music_song(song_query=song_name)
+            if spotify_song['name'] in song['title']:
+                return song
+            else:
+                print(f"{song['title']} isn't the same as {spotify_song['name']}, retrying using a query search.")
+        song_name = f"{spotify_song['name']} - {spotify_song['artists'][0]['name']}"
+        song = await self.search_youtube_music_song(song_query=song_name)
         return song
 
     async def search_spotify_playlist(self, link):
@@ -316,7 +316,7 @@ class SearchPlatforms:
 
         itunes_info = search_itunes_for_info(song_id)
 
-        album_query = f"{itunes_info['collectionName']} - {itunes_info['artistName']}"
+        album_query = f"{itunes_info['collectionName']} - {itunes_info['artistName']} ({itunes_info['releaseDate'][:4]})"
 
         return await self.search_youtube_music_album(album_query=album_query)
 
