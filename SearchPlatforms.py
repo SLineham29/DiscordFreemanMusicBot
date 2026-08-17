@@ -1,3 +1,4 @@
+import random
 import yt_dlp
 import asyncio
 import spotipy
@@ -40,6 +41,21 @@ def search_itunes_for_info(song_id):
     else:
         print(f"Invalid response from iTunes API: Status {json_results.status_code}")
         return None
+
+def get_spotify_playlist_and_randomise(sp, items_so_far, id):
+    playlist_items = []
+    playlist_items.extend(items_so_far)
+
+    results = sp.playlist_items(id, offset=100, limit=100)
+    playlist_items.extend(results["items"])
+
+    while results['next']:
+        print("Found more, going again...")
+        results = sp.next(results)
+        playlist_items.extend(results["items"])
+
+    random_songs = random.sample(playlist_items, 50)
+    return random_songs
 
 class SearchPlatforms:
     def __init__(self, client_id, client_secret):
@@ -115,7 +131,6 @@ class SearchPlatforms:
             song_id = parse_qs(urlparse(song_link).query)['v'][0]
             song_info = self.yt_music.get_song(song_id)
             song = {
-                **song_info,
                 "url": 'https://music.youtube.com/watch?v=' + song_info['videoDetails']['videoId'],
                 "title": song_info['videoDetails']['title'],
                 "duration": int(song_info['videoDetails']['lengthSeconds']),
@@ -130,8 +145,8 @@ class SearchPlatforms:
                 return song
             song_info = results[0]
             song = {
-                **song_info,
                 "url": 'https://music.youtube.com/watch?v=' + song_info['videoId'],
+                "title": song_info['title'],
                 "duration": song_info['duration_seconds'],
                 "thumbnail": song_info['thumbnails'][-1]['url'],
                 "artist": song_info['artists'][0]['name']
@@ -214,23 +229,12 @@ class SearchPlatforms:
         else:
             print("Could not find a valid Spotify song ID in this link.")
             return
-
         spotify_song = self.sp.track(song_id)
-        isrc = spotify_song.get("external_ids", {}).get("isrc")
-        print(f"ISRC: {isrc}")
+        return await self.spotify_isrc_or_name_query(spotify_song)
 
-        if isrc:
-            song = await self.search_youtube_music_song(song_query=isrc)
-            if spotify_song['name'] in song['title']:
-                return song
-            else:
-                print(f"{song['title']} isn't the same as {spotify_song['name']}, retrying using a query search.")
-        song_name = f"{spotify_song['name']} - {spotify_song['artists'][0]['name']}"
-        song = await self.search_youtube_music_song(song_query=song_name)
-        return song
-
+    # Due to Spotify's API changes, you can now only play playlists that the API user account is either the owner of or has collaborated to.
     async def search_spotify_playlist(self, link):
-        spotify_playlist_songs = []
+        playlist_songs = []
 
         # # Capture anything after track, and before the next symbol, which should be the end of the ID.
         if re.search('spotify.link', link):
@@ -243,19 +247,25 @@ class SearchPlatforms:
             return None
 
         playlist_id = playlist_id_search.group(1)
-        playlist_songs = self.sp.playlist_items(playlist_id)
+        playlist_info = self.sp.playlist(playlist_id)
+        if not playlist_info['items']:
+            return None
 
-        ytdl_spotify_playlist_options = {
-            **self.ytdl_yt_search_options,
-            "playlist_items": "1"
+        playlist_details = {
+            "title": playlist_info['name'],
+            "author": playlist_info['owner']['display_name'],
+            "thumbnail": playlist_info['images'][0]['url'],
+            "track_count": len(playlist_info['items']['items'])
         }
 
-        for song in playlist_songs["items"]:
-            song_artist_names = f"{song["name"]} - {song["artists"][0]['name']} (Audio)"
-            results = await self.search_youtube_video(song_artist_names, ytdl_spotify_playlist_options)
-            videos = list(results.get("entries", []))
-            spotify_playlist_songs.append(videos[0])
-        return spotify_playlist_songs
+        if playlist_info['items']['total'] > 100:
+            playlist_song_info = get_spotify_playlist_and_randomise(self.sp, playlist_info['items']['items'], playlist_id)
+        else:
+            playlist_song_info = playlist_info['items']['items']
+        for song in playlist_song_info:
+            song_details = await self.spotify_isrc_or_name_query(song['item'])
+            playlist_songs.append(song_details)
+        return playlist_details, playlist_songs
 
     async def search_spotify_album(self, link):
         album_songs = []
@@ -290,6 +300,18 @@ class SearchPlatforms:
             return album_songs
 
         return await self.search_youtube_music_album(album_query=album_query)
+
+    async def spotify_isrc_or_name_query(self, spotify_song):
+        isrc = spotify_song.get("external_ids", {}).get("isrc")
+        if isrc:
+            yt_song = await self.search_youtube_music_song(song_query=isrc)
+            if spotify_song['name'] in yt_song['title'] or yt_song['title'] in spotify_song['name']:
+                return yt_song
+            else:
+                print(f"{yt_song['title']} isn't the same as {spotify_song['name']}, retrying using a query search.")
+        song_name = f"{spotify_song['name']} - {spotify_song['artists'][0]['name']}"
+        yt_song = await self.search_youtube_music_song(song_query=song_name)
+        return yt_song
 
     async def search_apple_song(self, link):
         id_search = re.search(r'i=([a-zA-Z0-9]+)', link)

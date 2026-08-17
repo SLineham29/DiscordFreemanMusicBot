@@ -206,12 +206,8 @@ class MusicCommands(commands.Cog):
                 link_is_decoded = False
                 link = song_info["url"]
             case "spotify_playlist":
-                # Since Spotify closed the API for non-premium members, I can't check if this works and fix it.
                 playlist_info, playlist_songs = await self.searcher.search_spotify_playlist(link)
-                for i, song in enumerate(playlist_songs):
-                    not_last_song = (i != len(playlist_songs) - 1)
-                    await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False, song["url"])
-                await interaction.followup.send(f"Added {len(playlist_songs)} songs from a Spotify playlist to the queue")
+                await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs)
                 return
             case "spotify_album":
                 album_info, album_songs = await self.searcher.search_spotify_album(link)
