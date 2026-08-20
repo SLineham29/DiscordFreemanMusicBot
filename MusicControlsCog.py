@@ -347,7 +347,6 @@ class MusicCommands(commands.Cog):
 
         # If this incoming song will be the next one played, decode it now to prevent a long wait time between songs.
         if len(self.queue) == 1 and voice_client.is_playing():
-            print("Loading song in the background...")
             asyncio.create_task(self.decode_song())
 
         if not last_song:
@@ -381,7 +380,7 @@ class MusicCommands(commands.Cog):
         is_valid = False
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.head(link, timeout=5) as response:
+                async with session.head(link, timeout=5, allow_redirects=True) as response:
                     if response.status in(200, 206):
                         is_valid = True
                     else:

@@ -50,12 +50,18 @@ def get_spotify_playlist_and_randomise(sp, items_so_far, id):
     playlist_items.extend(results["items"])
 
     while results['next']:
-        print("Found more, going again...")
         results = sp.next(results)
         playlist_items.extend(results["items"])
 
     random_songs = random.sample(playlist_items, 50)
     return random_songs
+
+def normalise_song_title(title):
+    title = title.lower()
+    title = re.sub(r'[\-\(\)\[\]/]', ' ', title)
+    title = re.sub(r'[^\w\s]', '', title)
+    title = re.sub(r'\s+', ' ', title).strip()
+    return title
 
 class SearchPlatforms:
     def __init__(self, client_id, client_secret):
@@ -141,7 +147,16 @@ class SearchPlatforms:
             results = self.yt_music.search(song_query, filter='songs', limit=1)
             if not results:
                 song_query += " (Audio)"
-                song = await self.search_youtube_with_query(song_query)
+                yt_song = await self.search_youtube_with_query(song_query)
+                if yt_song is None:
+                    return None
+                song = {
+                    "url": yt_song['original_url'],
+                    "title": yt_song['fulltitle'],
+                    "duration": yt_song['duration'],
+                    "thumbnail": yt_song['thumbnails'][-1]['url'],
+                    "artist": yt_song['artists'][0]
+                }
                 return song
             song_info = results[0]
             song = {
@@ -255,11 +270,12 @@ class SearchPlatforms:
             "title": playlist_info['name'],
             "author": playlist_info['owner']['display_name'],
             "thumbnail": playlist_info['images'][0]['url'],
-            "track_count": len(playlist_info['items']['items'])
+            "track_count": playlist_info['items']['total']
         }
 
         if playlist_info['items']['total'] > 100:
             playlist_song_info = get_spotify_playlist_and_randomise(self.sp, playlist_info['items']['items'], playlist_id)
+            playlist_details['track_count'] = f"50 chosen / {playlist_info['items']['total']}"
         else:
             playlist_song_info = playlist_info['items']['items']
         for song in playlist_song_info:
@@ -305,7 +321,12 @@ class SearchPlatforms:
         isrc = spotify_song.get("external_ids", {}).get("isrc")
         if isrc:
             yt_song = await self.search_youtube_music_song(song_query=isrc)
-            if spotify_song['name'] in yt_song['title'] or yt_song['title'] in spotify_song['name']:
+            if yt_song is None:
+                print("Song does not exist, retrying with actual name")
+                yt_song = await self.search_youtube_music_song(song_query=spotify_song['name'])
+            sp_song_normalised = normalise_song_title(spotify_song['name'])
+            yt_song_normalised = normalise_song_title(yt_song['title'])
+            if sp_song_normalised in yt_song_normalised or yt_song_normalised in sp_song_normalised:
                 return yt_song
             else:
                 print(f"{yt_song['title']} isn't the same as {spotify_song['name']}, retrying using a query search.")
@@ -351,6 +372,7 @@ class SearchPlatforms:
         song = {
             "url": link,
             "title": cleaned_title,
-            "artist": "(Local / Hosted File)"
+            "artist": "(Local / Hosted File)",
+            "duration": 0
         }
         return song
