@@ -112,9 +112,9 @@ def added_album_to_queue_embed(album):
     embed.set_thumbnail(url=album.get("thumbnail"))
     return embed
 
-def added_playlist_to_queue_embed(playlist):
+def added_playlist_to_queue_embed(playlist, platform_name):
     embed = discord.Embed(
-        title="Added a Playlist to the Queue",
+        title=f"Added a {platform_name} Playlist to the Queue",
         description=f"{playlist.get('title')} - Created by {playlist.get('author')}",
         colour=discord.Colour.brand_green()
     )
@@ -187,7 +187,7 @@ class MusicCommands(commands.Cog):
                 song_info = await self.searcher.search_youtube_video(link)
             case "youtube_playlist":
                 playlist_info, playlist_songs = await self.searcher.search_youtube_playlist(link)
-                await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs)
+                await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs, "YouTube")
                 return
             case "yt_music_song":
                 song_info = await self.searcher.search_youtube_music_song(song_link=link)
@@ -195,7 +195,7 @@ class MusicCommands(commands.Cog):
                 link = song_info["url"]
             case "yt_music_playlist":
                 playlist_info, playlist_songs = await self.searcher.search_youtube_music_playlist(playlist_link=link)
-                await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs)
+                await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs, "YouTube Music")
                 return
             case "yt_music_album":
                 album_info, album_songs = await self.searcher.search_youtube_music_album(album_link=link)
@@ -207,7 +207,7 @@ class MusicCommands(commands.Cog):
                 link = song_info["url"]
             case "spotify_playlist":
                 playlist_info, playlist_songs = await self.searcher.search_spotify_playlist(link)
-                await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs)
+                await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs, "Spotify")
                 return
             case "spotify_album":
                 album_info, album_songs = await self.searcher.search_spotify_album(link)
@@ -257,7 +257,7 @@ class MusicCommands(commands.Cog):
                 await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
             case "Playlist":
                 playlist_info, playlist_songs = await self.searcher.search_youtube_music_playlist(playlist_query=query)
-                await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs)
+                await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs, "YouTube Music")
 
     @app_commands.command(name="pause", description="Pause the song")
     async def pause(self, interaction: discord.Interaction):
@@ -323,11 +323,11 @@ class MusicCommands(commands.Cog):
             await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False, song["url"])
         await interaction.followup.send(embed=added_album_to_queue_embed(album_info))
 
-    async def add_playlist_to_queue(self, interaction, voice_client, playlist_info, playlist_songs):
+    async def add_playlist_to_queue(self, interaction, voice_client, playlist_info, playlist_songs, platform_name):
         for i, song in enumerate(playlist_songs):
             not_last_song = (i != len(playlist_songs) - 1)
             await self.add_to_queue(song, interaction, voice_client, True, not_last_song, False, song["url"])
-        await interaction.followup.send(embed=added_playlist_to_queue_embed(playlist_info))
+        await interaction.followup.send(embed=added_playlist_to_queue_embed(playlist_info, platform_name))
 
     async def add_to_queue(self, song_info, interaction, voice_client, part_of_playlist, last_song, is_decoded_link, original_link):
 
@@ -413,7 +413,12 @@ class MusicCommands(commands.Cog):
             # before playback. This needs to be done here rather than on queue addition because otherwise the YouTube servers
             # could be called multiple times at once, which might result in an IP timeout.
             if not song['decodedLink']:
+                song_name = song['title']
                 song = await self.decode_song(song)
+                if song is None:
+                    await self.announcement_channel.send(f"{song_name} is either unavailable or age-restricted, skipping...")
+                    asyncio.run_coroutine_threadsafe(self.next_song(interaction), self.bot.loop)
+                    return
 
             # Try and check for a valid link 3 times.
             for attempt in range(3):

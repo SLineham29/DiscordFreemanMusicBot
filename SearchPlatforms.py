@@ -52,7 +52,7 @@ def get_spotify_playlist_and_randomise(sp, items_so_far, id):
     while results['next']:
         results = sp.next(results)
         playlist_items.extend(results["items"])
-
+    random.shuffle(playlist_items)
     random_songs = random.sample(playlist_items, 50)
     return random_songs
 
@@ -322,7 +322,7 @@ class SearchPlatforms:
         if isrc:
             yt_song = await self.search_youtube_music_song(song_query=isrc)
             if yt_song is None:
-                print("Song does not exist, retrying with actual name")
+                print(f"Song does not exist, retrying with {spotify_song['name']}")
                 yt_song = await self.search_youtube_music_song(song_query=spotify_song['name'])
             sp_song_normalised = normalise_song_title(spotify_song['name'])
             yt_song_normalised = normalise_song_title(yt_song['title'])
