@@ -261,19 +261,19 @@ class MusicCommands(commands.Cog):
 
     @app_commands.command(name="pause", description="Pause the song")
     async def pause(self, interaction: discord.Interaction):
-        await interaction.response.send_message("Pausing...", ephemeral=True)
         voice_client = await(check_if_in_server(interaction))
         if voice_client is None:
             return
         voice_client.pause()
+        await interaction.response.send_message(f"<@{interaction.user.id}> has paused " + self.current_song_name)
 
     @app_commands.command(name="resume", description="Resume the song")
     async def resume(self, interaction: discord.Interaction):
-        await interaction.response.send_message("Resuming...", ephemeral=True)
         voice_client = await(check_if_in_server(interaction))
         if voice_client is None:
             return
         voice_client.resume()
+        await interaction.response.send_message("Resuming...", delete_after=10)
 
     @app_commands.command(name="skip", description="Skip the current song and go to the next one in the queue")
     async def skip(self, interaction: discord.Interaction):
@@ -316,6 +316,30 @@ class MusicCommands(commands.Cog):
         queue_creator = QueueCreator(given_queue=self.queue)
         queue_embed = queue_creator.create_queue_embed()
         await interaction.response.send_message(embed=queue_embed, view=queue_creator)
+
+    @app_commands.command(name="move", description="Move a song in a specific position in the queue to the front.")
+    @app_commands.describe(position="The current queue position of the song you would like to move")
+    async def move_to_front_of_queue(self, interaction: discord.Interaction, position: int):
+        if len(self.queue) == 0:
+            await interaction.response.send_message("Queue is currently empty.", ephemeral=True)
+            return
+        if position > len(self.queue):
+            await interaction.response.send_message(f"There is no song at this position, there are only {len(self.queue)} songs in the queue.", ephemeral=True)
+            return
+        chosen_song = self.queue.pop(position - 1)
+        chosen_song = await self.decode_song(chosen_song)
+        self.queue.insert(0, chosen_song)
+        await interaction.response.send_message(f"The song originally at position {position}, {self.queue[0]['title']}, will now be played next.", delete_after=30)
+
+    @app_commands.command(name="move_last", description="Move the last song in the queue to the front.")
+    async def move_last_to_front_of_queue(self, interaction: discord.Interaction):
+        if len(self.queue) == 0:
+            await interaction.response.send_message("Queue is currently empty.", ephemeral=True)
+            return
+        chosen_song = self.queue.pop(-1)
+        chosen_song = await self.decode_song(chosen_song)
+        self.queue.insert(0, chosen_song)
+        await interaction.response.send_message(f"The song originally last in the queue, {self.queue[0]['title']}, will now be played next.", delete_after=30)
 
     async def add_album_to_queue(self, interaction, voice_client, album_info, album_songs):
         for i, song in enumerate(album_songs):
