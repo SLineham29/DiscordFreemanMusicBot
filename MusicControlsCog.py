@@ -168,9 +168,9 @@ class MusicCommands(commands.Cog):
                 link_type = "spotify_song"
                 await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into American Money by BØRNS!")
             case 50:
-                link = "https://open.spotify.com/track/2dMYPr7PTeiA3fyE3tc4ZT?si=f064104073fa46c4"
+                link = "https://open.spotify.com/track/0aYjeR35rsGeP1LLKaqgr5?si=70cfff201a984588"
                 link_type = "spotify_song"
-                await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Seven Rings In Hand from Sonic and the Secret Rings!")
+                await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Theme of Laura by Akira Yamaoka!")
             case 60:
                 link = "https://open.spotify.com/track/0kVOor973ijVqOBhYqvaE8?si=ffc6676738174b7d"
                 link_type = "spotify_song"
@@ -327,7 +327,8 @@ class MusicCommands(commands.Cog):
             await interaction.response.send_message(f"There is no song at this position, there are only {len(self.queue)} songs in the queue.", ephemeral=True)
             return
         chosen_song = self.queue.pop(position - 1)
-        chosen_song = await self.decode_song(chosen_song)
+        if chosen_song['decodedLink'] is None:
+            chosen_song = await self.decode_song(chosen_song)
         self.queue.insert(0, chosen_song)
         await interaction.response.send_message(f"The song originally at position {position}, {self.queue[0]['title']}, will now be played next.", delete_after=30)
 
@@ -337,7 +338,8 @@ class MusicCommands(commands.Cog):
             await interaction.response.send_message("Queue is currently empty.", ephemeral=True)
             return
         chosen_song = self.queue.pop(-1)
-        chosen_song = await self.decode_song(chosen_song)
+        if chosen_song['decodedLink'] is None:
+            chosen_song = await self.decode_song(chosen_song)
         self.queue.insert(0, chosen_song)
         await interaction.response.send_message(f"The song originally last in the queue, {self.queue[0]['title']}, will now be played next.", delete_after=30)
 
