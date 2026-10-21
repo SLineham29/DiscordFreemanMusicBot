@@ -8,6 +8,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
+import subprocess
 from SearchPlatforms import SearchPlatforms
 from QueueCreator import QueueCreator
 
@@ -402,18 +403,23 @@ class MusicCommands(commands.Cog):
         else:
             return None
 
-    async def check_decoded_link_validity(self, link):
-        is_valid = False
+    def ffprobe_song(self, link):
+        command = ["ffprobe", "-v", "warning", "-reconnect", "1", "-reconnect_streamed", "1",
+               "-reconnect_on_http_error", "4xx,5xx", "-reconnect_delay_max", "2", "-i", link]
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.head(link, timeout=5, allow_redirects=True) as response:
-                    if response.status in(200, 206):
-                        is_valid = True
-                    else:
-                        print(f"URL check failed: {response.status} for {link}")
+            probe_check = subprocess.run(command, capture_output=True, timeout=5, text=True)
         except Exception as e:
-            print(f"URL check failed: {e}")
-        return is_valid
+            print(f"ffprobe check failed: {e}")
+            return False
+
+        if probe_check.returncode == 0:
+            return True
+
+        print("ffprobe failed:", probe_check.stderr[-50:])
+        return False
+
+    async def check_decoded_link_validity(self, link):
+        return await asyncio.to_thread(self.ffprobe_song, link)
 
     async def next_song(self, interaction: discord.Interaction):
         async with self.play_locker:
