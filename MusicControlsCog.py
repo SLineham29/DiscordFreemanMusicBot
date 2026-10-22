@@ -403,23 +403,32 @@ class MusicCommands(commands.Cog):
         else:
             return None
 
-    def ffprobe_song(self, link):
-        command = ["ffprobe", "-v", "warning", "-reconnect", "1", "-reconnect_streamed", "1",
-               "-reconnect_on_http_error", "4xx,5xx", "-reconnect_delay_max", "2", "-i", link]
-        try:
-            probe_check = subprocess.run(command, capture_output=True, timeout=5, text=True)
-        except Exception as e:
-            print(f"ffprobe check failed: {e}")
-            return False
-
-        if probe_check.returncode == 0:
-            return True
-
-        print("ffprobe failed:", probe_check.stderr[-47:])
-        return False
-
     async def check_decoded_link_validity(self, link):
-        return await asyncio.to_thread(self.ffprobe_song, link)
+        try:
+            playback_response = await asyncio.wait_for(asyncio.to_thread(link.read), 5)
+        except asyncio.TimeoutError:
+            return False
+        return len(playback_response) > 0
+
+    async def create_song_object(self, song):
+        ffmpeg_options = {
+            'before_options': "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -reconnect_on_network_error 1 -reconnect_on_http_error 4xx,5xx",
+            'options': '-vn'
+        }
+
+        # The top source is if I have the FFMPEG exe stored in Windows,
+        # and the other is if it's installed globally in my Raspberry Pi.
+        if platform.system() == "Windows":
+            if song.get("artist") == "(Local / Hosted File)":
+                source = discord.FFmpegPCMAudio(song['url'], **ffmpeg_options)
+            else:
+                source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, codec='copy')
+        else:
+            if song.get("artist") == "(Local / Hosted File)":
+                source = discord.FFmpegPCMAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
+            else:
+                source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg", codec='copy')
+        return source
 
     async def next_song(self, interaction: discord.Interaction):
         async with self.play_locker:
@@ -452,36 +461,21 @@ class MusicCommands(commands.Cog):
                     asyncio.run_coroutine_threadsafe(self.next_song(interaction), self.bot.loop)
                     return
 
-            # Try and check for a valid link 3 times.
+            # Try and check for a valid song in the link 3 times.
+            source = await self.create_song_object(song)
             for attempt in range(3):
-                if not await self.check_decoded_link_validity(song['url']):
+                if not await self.check_decoded_link_validity(source):
                     await self.announcement_channel.send(f"Next song has an invalid link, retrying with attempt {attempt + 1}/3", delete_after=10)
+                    source.cleanup()
                     song['decodedLink'] = False
                     song = await self.decode_song(song)
+                    source = await self.create_song_object(song)
                 else:
                     break
             else:
                 await self.announcement_channel.send(f"Couldn't get a valid link, skipping {song['title']}", delete_after=30)
                 asyncio.run_coroutine_threadsafe(self.next_song(interaction), self.bot.loop)
                 return
-
-            ffmpeg_options = {
-                'before_options': "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -reconnect_on_network_error 1 -reconnect_on_http_error 4xx,5xx",
-                'options': '-vn'
-            }
-
-            # The top source is if I have the FFMPEG exe stored in Windows,
-            # and the other is if it's installed globally in my Raspberry Pi.
-            if platform.system() == "Windows":
-                if song.get("artist") == "(Local / Hosted File)":
-                    source = discord.FFmpegPCMAudio(song['url'], **ffmpeg_options)
-                else:
-                    source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, codec='copy')
-            else:
-                if song.get("artist") == "(Local / Hosted File)":
-                    source = discord.FFmpegPCMAudio(song['url'], **ffmpeg_options, executable="ffmpeg")
-                else:
-                    source = discord.FFmpegOpusAudio(song['url'], **ffmpeg_options, executable="ffmpeg", codec='copy')
 
             # After the song finishes, loop through this method again to get to the next song.
             def after_song(error):
