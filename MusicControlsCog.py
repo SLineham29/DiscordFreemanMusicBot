@@ -389,6 +389,14 @@ class MusicCommands(commands.Cog):
         self.queue.insert(0, chosen_song)
         await interaction.response.send_message(f"The song originally last in the queue, {self.queue[0]['title']}, will now be played next.", delete_after=30)
 
+    @app_commands.command(name="shuffle", description="Shuffle the queue.")
+    async def shuffle_queue(self, interaction: discord.Interaction):
+        if len(self.queue) == 0:
+            await interaction.response.send_message("Queue is currently empty.", ephemeral=True)
+            return
+        random.shuffle(self.queue)
+        await interaction.response.send_message(f"Queue shuffled.")
+
     async def add_album_to_queue(self, interaction, voice_client, album_info, album_songs):
         for i, song in enumerate(album_songs):
             not_last_song = (i != len(album_songs) - 1)
