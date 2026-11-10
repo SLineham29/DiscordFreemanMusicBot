@@ -70,6 +70,11 @@ async def check_if_in_server(interaction):
         await voice_client.move_to(voice_channel)
     return voice_client
 
+async def leave_call_on_error(interaction):
+    voice_client = interaction.guild.voice_client
+    if not voice_client.is_playing() and not voice_client.is_paused():
+        await voice_client.disconnect()
+
 def get_error_type(error):
     if "Sign in to confirm your age" in error:
         return "Video is age-restricted, skipping..."
@@ -157,7 +162,7 @@ class MusicCommands(commands.Cog):
                 link_type = "spotify_song"
                 await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Skin by Rag'n'Bone Man!")
             case 20:
-                link = "https://open.spotify.com/track/2u9VGZmVz7Rm01SfDgzcfA?si=0009c1700a744058"
+                link = "https://music.youtube.com/watch?v=s9eHeVHyZvE&si=UPVGoOkr0uzbQ-9R"
                 link_type = "spotify_song"
                 await self.announcement_channel.send("Congratulations, your link has been randomly selected to turn into Liebestraum No. 3 in A-Flat Major, S.541/3 by Frank Liszt!")
             case 30:
@@ -186,16 +191,19 @@ class MusicCommands(commands.Cog):
                 song_info = await self.searcher.search_youtube_with_query(link)
                 if song_info is None:
                     await interaction.followup.send("Couldn't find a valid song/video with the given query.")
+                    await leave_call_on_error(interaction)
                     return
             case "youtube_video":
                 song_info = await self.searcher.search_youtube_video(link)
                 if song_info is None:
                     await interaction.followup.send("Can't find a valid song from the given link.")
+                    await leave_call_on_error(interaction)
                     return
             case "youtube_playlist":
                 playlist_info, playlist_songs = await self.searcher.search_youtube_playlist(link)
                 if playlist_info is None:
                     await interaction.followup.send("Can't find a valid playlist from the given link.")
+                    await leave_call_on_error(interaction)
                     return
                 await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs, "YouTube")
                 return
@@ -203,6 +211,7 @@ class MusicCommands(commands.Cog):
                 song_info = await self.searcher.search_youtube_music_song(song_link=link)
                 if song_info is None:
                     await interaction.followup.send("Can't find a valid song from the given link, maybe try another platform?")
+                    await leave_call_on_error(interaction)
                     return
                 link_is_decoded = False
                 link = song_info["url"]
@@ -210,6 +219,7 @@ class MusicCommands(commands.Cog):
                 playlist_info, playlist_songs = await self.searcher.search_youtube_music_playlist(playlist_link=link)
                 if playlist_info is None:
                     await interaction.followup.send("Can't find a valid playlist from the given link.")
+                    await leave_call_on_error(interaction)
                     return
                 await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs, "YouTube Music")
                 return
@@ -217,6 +227,7 @@ class MusicCommands(commands.Cog):
                 album_info, album_songs = await self.searcher.search_youtube_music_album(album_link=link)
                 if album_info is None:
                     await interaction.followup.send("Can't find a valid album from the given link, maybe try another platform?")
+                    await leave_call_on_error(interaction)
                     return
                 await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
                 return
@@ -224,6 +235,7 @@ class MusicCommands(commands.Cog):
                 song_info = await self.searcher.search_spotify_song(link)
                 if song_info is None:
                     await interaction.followup.send("Can't find a valid song from the given link, maybe try another platform?")
+                    await leave_call_on_error(interaction)
                     return
                 link_is_decoded = False
                 link = song_info["url"]
@@ -231,9 +243,11 @@ class MusicCommands(commands.Cog):
                 playlist_info, playlist_songs = await self.searcher.search_spotify_playlist(link)
                 if playlist_info == "No Access":
                     await interaction.followup.send("This bot doesn't have access to this playlist due to Spotify API restrictions.")
+                    await leave_call_on_error(interaction)
                     return
                 elif playlist_info is None:
                     await interaction.followup.send("Can't find a valid playlist from the given link.")
+                    await leave_call_on_error(interaction)
                     return
                 await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs, "Spotify")
                 return
@@ -241,6 +255,7 @@ class MusicCommands(commands.Cog):
                 album_info, album_songs = await self.searcher.search_spotify_album(link)
                 if album_info is None:
                     await interaction.followup.send("Can't find a valid album from the given link, maybe try another platform?")
+                    await leave_call_on_error(interaction)
                     return
                 await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
                 return
@@ -248,6 +263,7 @@ class MusicCommands(commands.Cog):
                 song_info = await self.searcher.search_apple_song(link)
                 if song_info is None:
                     await interaction.followup.send("Can't find a valid song from the given link, maybe try another platform?")
+                    await leave_call_on_error(interaction)
                     return
                 link_is_decoded = False
                 link = song_info["url"]
@@ -255,6 +271,7 @@ class MusicCommands(commands.Cog):
                 album_info, album_songs = await self.searcher.search_apple_album(link)
                 if album_info is None:
                     await interaction.followup.send("Can't find a valid album from the given link, maybe try another platform?")
+                    await leave_call_on_error(interaction)
                     return
                 await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
                 return
