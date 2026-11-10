@@ -119,6 +119,8 @@ class SearchPlatforms:
 
     async def search_youtube_playlist(self, link):
         playlist_info = await self.search_youtube_video(link, self.ytdl_playlist_options)
+        if playlist_info is None:
+            return None, None
         playlist_details = {
             "title": playlist_info["title"],
             "author": playlist_info["uploader"],
@@ -136,6 +138,8 @@ class SearchPlatforms:
         if song_link:
             song_id = parse_qs(urlparse(song_link).query)['v'][0]
             song_info = self.yt_music.get_song(song_id)
+            if not song_info.get("videoDetails"):
+                return None
             song = {
                 "url": 'https://music.youtube.com/watch?v=' + song_info['videoDetails']['videoId'],
                 "title": song_info['videoDetails']['title'],
@@ -175,9 +179,13 @@ class SearchPlatforms:
         if album_link:
             album_id = parse_qs(urlparse(album_link).query)['list'][0]
             browse_id = self.yt_music.get_album_browse_id(album_id)
+            if browse_id is None:
+                return None, None
             album_song_info = self.yt_music.get_album(browse_id)
         elif album_query:
             yt_album = self.yt_music.search(album_query, filter='albums', limit=1)
+            if len(yt_album) == 0:
+                return None, None
             album_song_info = self.yt_music.get_album(yt_album[0]['browseId'])
 
         album_details = {
@@ -211,8 +219,12 @@ class SearchPlatforms:
         if playlist_link:
             playlist_id = parse_qs(urlparse(playlist_link).query)['list'][0]
             playlist_song_info = self.yt_music.get_playlist(playlist_id)
+            if len(playlist_song_info) == 0:
+                return None, None
         elif playlist_query:
             yt_playlist = self.yt_music.search(playlist_query, filter='playlists', limit=1)
+            if len(yt_playlist) == 0:
+                return None, None
             playlist_song_info = self.yt_music.get_playlist(yt_playlist[0]['browseId'])
 
         playlist_details = {
@@ -239,12 +251,13 @@ class SearchPlatforms:
             link = web_response.url
 
         id_search = re.search(r'/track/([a-zA-Z0-9]+)', link)
-        if id_search:
-            song_id = id_search.group(1)
-        else:
-            print("Could not find a valid Spotify song ID in this link.")
-            return
-        spotify_song = self.sp.track(song_id)
+        if not id_search:
+            return None
+        song_id = id_search.group(1)
+        try:
+            spotify_song = self.sp.track(song_id)
+        except spotipy.SpotifyException as e:
+                return None
         return await self.spotify_isrc_or_name_query(spotify_song)
 
     # Due to Spotify's API changes, you can now only play playlists that the API user account is either the owner of or has collaborated to.
@@ -258,13 +271,15 @@ class SearchPlatforms:
 
         playlist_id_search = re.search(r'/playlist/([a-zA-Z0-9]+)', link)
         if not playlist_id_search:
-            print("Could not find a valid Spotify playlist ID in this link.")
             return None
 
         playlist_id = playlist_id_search.group(1)
-        playlist_info = self.sp.playlist(playlist_id)
-        if not playlist_info['items']:
-            return None
+        try:
+            playlist_info = self.sp.playlist(playlist_id)
+        except spotipy.SpotifyException as e:
+                return None, None
+        if not playlist_info.get('items'):
+            return "No Access", None
 
         playlist_details = {
             "title": playlist_info['name'],
@@ -292,11 +307,13 @@ class SearchPlatforms:
 
         album_id_search = re.search(r'/album/([a-zA-Z0-9]+)', link)
         if not album_id_search:
-            print("Could not find a valid Spotify album ID in this link.")
             return None
 
         album_id = album_id_search.group(1)
-        album_info = self.sp.album(album_id)
+        try:
+            album_info = self.sp.album(album_id)
+        except spotipy.SpotifyException as e:
+                return None, None
         album_query = f"{album_info['name']} - {album_info['artists'][0]['name']} ({album_info['release_date'][:4]})"
 
         yt_album = self.yt_music.search(album_query, filter='albums', limit=1)
@@ -338,13 +355,15 @@ class SearchPlatforms:
         id_search = re.search(r'i=([a-zA-Z0-9]+)', link)
 
         if not id_search:
-            print("Could not find a valid iTunes ID in this link.")
+            return None
 
         song_id = id_search.group(1)
 
-        song_info = search_itunes_for_info(song_id)
+        itunes_info = search_itunes_for_info(song_id)
+        if itunes_info is None:
+            return None, None
 
-        song_name = f"{song_info['trackName']} - {song_info['artistName']}"
+        song_name = f"{itunes_info['trackName']} - {itunes_info['artistName']}"
 
         song = await self.search_youtube_music_song(song_query=song_name)
         return song
@@ -353,11 +372,13 @@ class SearchPlatforms:
         id_search = re.search(r'/album/.*/(\d+)', link)
 
         if not id_search:
-            print("Could not find a valid iTunes ID in this link.")
+            return None, None
 
         song_id = id_search.group(1)
 
         itunes_info = search_itunes_for_info(song_id)
+        if itunes_info is None:
+            return None, None
 
         album_query = f"{itunes_info['collectionName']} - {itunes_info['artistName']} ({itunes_info['releaseDate'][:4]})"
 

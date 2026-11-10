@@ -184,42 +184,78 @@ class MusicCommands(commands.Cog):
         match link_type:
             case "query":
                 song_info = await self.searcher.search_youtube_with_query(link)
+                if song_info is None:
+                    await interaction.followup.send("Couldn't find a valid song/video with the given query.")
+                    return
             case "youtube_video":
                 song_info = await self.searcher.search_youtube_video(link)
+                if song_info is None:
+                    await interaction.followup.send("Can't find a valid song from the given link.")
+                    return
             case "youtube_playlist":
                 playlist_info, playlist_songs = await self.searcher.search_youtube_playlist(link)
+                if playlist_info is None:
+                    await interaction.followup.send("Can't find a valid playlist from the given link.")
+                    return
                 await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs, "YouTube")
                 return
             case "yt_music_song":
                 song_info = await self.searcher.search_youtube_music_song(song_link=link)
+                if song_info is None:
+                    await interaction.followup.send("Can't find a valid song from the given link, maybe try another platform?")
+                    return
                 link_is_decoded = False
                 link = song_info["url"]
             case "yt_music_playlist":
                 playlist_info, playlist_songs = await self.searcher.search_youtube_music_playlist(playlist_link=link)
+                if playlist_info is None:
+                    await interaction.followup.send("Can't find a valid playlist from the given link.")
+                    return
                 await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs, "YouTube Music")
                 return
             case "yt_music_album":
                 album_info, album_songs = await self.searcher.search_youtube_music_album(album_link=link)
+                if album_info is None:
+                    await interaction.followup.send("Can't find a valid album from the given link, maybe try another platform?")
+                    return
                 await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
                 return
             case "spotify_song":
                 song_info = await self.searcher.search_spotify_song(link)
+                if song_info is None:
+                    await interaction.followup.send("Can't find a valid song from the given link, maybe try another platform?")
+                    return
                 link_is_decoded = False
                 link = song_info["url"]
             case "spotify_playlist":
                 playlist_info, playlist_songs = await self.searcher.search_spotify_playlist(link)
+                if playlist_info == "No Access":
+                    await interaction.followup.send("This bot doesn't have access to this playlist due to Spotify API restrictions.")
+                    return
+                elif playlist_info is None:
+                    await interaction.followup.send("Can't find a valid playlist from the given link.")
+                    return
                 await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs, "Spotify")
                 return
             case "spotify_album":
                 album_info, album_songs = await self.searcher.search_spotify_album(link)
+                if album_info is None:
+                    await interaction.followup.send("Can't find a valid album from the given link, maybe try another platform?")
+                    return
                 await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
                 return
             case "apple_song":
                 song_info = await self.searcher.search_apple_song(link)
+                if song_info is None:
+                    await interaction.followup.send("Can't find a valid song from the given link, maybe try another platform?")
+                    return
                 link_is_decoded = False
                 link = song_info["url"]
             case "apple_album":
                 album_info, album_songs = await self.searcher.search_apple_album(link)
+                if album_info is None:
+                    await interaction.followup.send("Can't find a valid album from the given link, maybe try another platform?")
+                    return
                 await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
                 return
             case "audio_page":
@@ -251,13 +287,22 @@ class MusicCommands(commands.Cog):
         match search_filter:
             case "Song":
                 song_info = await self.searcher.search_youtube_music_song(song_query=query)
+                if song_info is None:
+                    await interaction.followup.send("Can't find a valid song from the given query.")
+                    return
                 await interaction.followup.send(embed=added_to_queue_embed(song_info))
                 await self.add_to_queue(song_info, interaction, voice_client, False, False, False, song_info["url"])
             case "Album":
                 album_info, album_songs = await self.searcher.search_youtube_music_album(album_query=query)
+                if album_info is None:
+                    await interaction.followup.send("Can't find a valid album from the given query.")
+                    return
                 await self.add_album_to_queue(interaction, voice_client, album_info, album_songs)
             case "Playlist":
                 playlist_info, playlist_songs = await self.searcher.search_youtube_music_playlist(playlist_query=query)
+                if playlist_info is None:
+                    await interaction.followup.send("Can't find a valid playlist from the given query.")
+                    return
                 await self.add_playlist_to_queue(interaction, voice_client, playlist_info, playlist_songs, "YouTube Music")
 
     @app_commands.command(name="pause", description="Pause the song")
